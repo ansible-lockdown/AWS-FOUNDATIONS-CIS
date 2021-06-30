@@ -1,0 +1,59 @@
+---
+- name: AUTOMATED | 2.3.1 | AUDIT | Ensure all S3 buckets employ encryption-at-rest
+  block:
+  - name: AUTOMATED | 2.3.1 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "2.3.1"
+        level: "1"
+        title: Ensure all S3 buckets employ encryption-at-rest
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get RDS DB Instances"
+    shell: |
+      aws rds describe-db-instances --region {{ item }} |
+      jq -r '.Region="{{ item }}"'
+    loop: "{{ region_list }}"
+    register: aws_rds_describe_db_instances_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format RDS DB Instances"
+    set_fact:
+      aws_rds_describe_db_instances: '{{ aws_rds_describe_db_instances_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: "[?DBInstances[?StorageEncrypted != `true`]].{Region:Region,DBInstances:DBInstances[].{DBInstanceIdentifier:DBInstanceIdentifier,StorageEncrypted:StorageEncrypted}}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_exception: "{{ (aws_rds_describe_db_instances == []) | bool }}"
+        test: 
+          source: "{{ aws_rds_describe_db_instances | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_rds_describe_db_instances | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Exception' if this_rule.is_exception else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ exception_evidence_message if this_rule.is_exception else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Ensure all S3 buckets employ encryption-at-rest
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_2_3_1
+  tags:
+    - level1
+    - section2
+    - rule_2.3.1

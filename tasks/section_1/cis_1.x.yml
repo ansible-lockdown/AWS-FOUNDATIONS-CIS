@@ -1,0 +1,1216 @@
+---
+- name: "SETUP | SECTION 1 | IAM Account Summary"
+  block:
+  - name: "SETUP | SECTION 1 | Get IAM Account Summary"
+    shell: aws iam get-account-summary
+    register: aws_iam_get_account_summary_raw
+    changed_when: false
+  - name: "SETUP | SECTION 1 | Format IAM Account Summary"
+    set_fact:
+      aws_iam_get_account_summary: "{{ aws_iam_get_account_summary_raw.stdout | from_json | default([],true) }}"
+  when:
+    - awscis_section1
+    - awscis_rule_1_4 or
+      awscis_rule_1_5
+  tags: 
+    - section1
+    - rule_1.4
+    - rule_1.5
+
+
+- name: "SETUP | SECTION 1 | Account Password Policy"
+  block:
+  - name: "SETUP | SECTION 1 | Get Account Password Policy"
+    shell: |
+      aws iam get-account-password-policy |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{}'; else echo "${ARRAY[@]}"; fi; }
+    register: aws_iam_get_account_password_policy_raw
+    changed_when: false
+    failed_when: aws_iam_get_account_password_policy_raw.rc == 1
+  - name: "SETUP | SECTION 1 | Format Account Password Policy"
+    set_fact:
+      aws_iam_get_account_password_policy: "{{ aws_iam_get_account_password_policy_raw.stdout | from_json | default({},true) }}"
+  when:
+    - awscis_section1
+    - awscis_rule_1_8 or
+      awscis_rule_1_9
+  tags: 
+    - section1
+    - rule_1.8
+    - rule_1.9
+
+
+- name: "SETUP | SECTION 1 | IAM Credential Report"
+  block:
+  - name: "SETUP | SECTION 1 | Generate IAM Credential Report"
+    shell: aws iam generate-credential-report
+    changed_when: false
+  - name: "SETUP | SECTION 1 | Get IAM Credential Report"
+    shell: aws iam get-credential-report
+    register: aws_iam_get_credential_report_raw
+    changed_when: false
+  - name: "SETUP | SECTION 1 | Base 64 Decode IAM Credential Report"
+    set_fact:
+      aws_iam_get_credential_report_csv: "{{ (aws_iam_get_credential_report_raw.stdout | from_json).Content | b64decode }}"
+  - name: SETUP | SECTION 1 | Write IAM Credential Report to csv file
+    copy:
+      content: "{{ aws_iam_get_credential_report_csv }}"
+      dest: "{{ temp_csv_file_path }}"
+    changed_when: false
+  - name: SETUP | SECTION 1 | Read IAM Credential Report from csv file
+    read_csv:
+      path: "{{ temp_csv_file_path }}"
+    register: aws_iam_get_credential_report_dict
+    delegate_to: localhost
+  - name: "SETUP | SECTION 1 | Get List from Credential Report Dictionary"
+    set_fact:
+      aws_iam_get_credential_report: "{{ aws_iam_get_credential_report_dict.list }}"
+  when:
+    - awscis_section1
+    - awscis_rule_1_7 or
+      awscis_rule_1_10 or
+      awscis_rule_1_11 or
+      awscis_rule_1_12 or
+      awscis_rule_1_14
+  tags: 
+    - section1
+    - rule_1.7
+    - rule_1.10
+    - rule_1.11
+    - rule_1.12
+    - rule_1.14
+
+
+- name: "SETUP | SECTION 1 | User List"
+  block:
+  - name: "SETUP | SECTION 1 | Get User List"
+    shell: aws iam list-users
+    register: aws_iam_list_users_raw
+    changed_when: false
+  - name: "SETUP | SECTION 1 | Format User List"
+    set_fact:
+      aws_iam_list_users: "{{ aws_iam_list_users_raw.stdout | from_json }}"
+  when:
+    - awscis_section1
+    - awscis_rule_1_13 or
+      awscis_rule_1_15
+  tags: 
+    - section1
+    - rule_1.13
+    - rule_1.15
+
+
+- name: MANUAL | 1.1 | AUDIT | Maintain current contact details
+  block:
+  - name: MANUAL | 1.1 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.1"
+        level: "1"
+        title: Maintain current contact details
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: Not Available
+          target: Not Available
+          status: [ 'manual', 'manual', 'manual' ]
+          evidence: "[]"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+    when: awscis_write_rule_results
+  when:
+    - awscis_rule_1_1
+    - do_manual
+  tags:
+    - level1
+    - section1
+    - audit
+    - rule_1.1
+
+
+- name: MANUAL | 1.2 | AUDIT | Ensure security contact information is registered
+  block:
+  - name: MANUAL | 1.2 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.2"
+        level: "1"
+        title: Ensure security contact information is registered
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: Not Available
+          target: Not Available
+          status: [ 'manual', 'manual', 'manual' ]
+          evidence: "[]"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+    when: awscis_write_rule_results
+  when:
+    - awscis_rule_1_2
+    - do_manual
+  tags:
+    - level1
+    - section1
+    - audit
+    - rule_1.2
+
+
+- name: MANUAL | 1.3 | AUDIT | Ensure security questions are registered in the AWS account
+  block:
+  - name: MANUAL | 1.3 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.3"
+        level: "1"
+        title: Ensure security questions are registered in the AWS account
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: Not Available
+          target: Not Available
+          status: [ 'manual', 'manual', 'manual' ]
+          evidence: "[]"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+    when: awscis_write_rule_results
+  when:
+    - awscis_rule_1_3
+    - do_manual
+  tags:
+    - level1
+    - section1
+    - audit
+    - rule_1.3
+
+
+- name: AUTOMATED | 1.4 | AUDIT | Ensure no 'root' user account access key exists
+  block:
+  - name: AUTOMATED | 1.4 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.4"
+        level: "1"
+        title: Ensure no 'root' user account access key exists
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: "SummaryMap.{AccountAccessKeysPresent:AccountAccessKeysPresent}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "SummaryMap.AccountAccessKeysPresent"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ aws_iam_get_account_summary | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_iam_get_account_summary | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Ensure no 'root' user account access key exists
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_4
+  tags:
+    - level1
+    - section1
+    - rule_1.4
+
+
+- name: AUTOMATED | 1.5 | AUDIT | Ensure no 'root' user account access key exists
+  block:
+  - name: AUTOMATED | 1.5 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.5"
+        level: "1"
+        title: Ensure no 'root' user account access key exists
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: "SummaryMap.{AccountMFAEnabled:AccountMFAEnabled}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "SummaryMap.AccountMFAEnabled"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ aws_iam_get_account_summary | json_query(source_query) | int == 1 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_iam_get_account_summary | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Ensure no 'root' user account access key exists
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_5
+  tags:
+    - level1
+    - section1
+    - rule_1.5
+
+
+- name: AUTOMATED | 1.6 | AUDIT | Ensure hardware MFA is enabled for the 'root' user account
+  block:
+  - name: AUTOMATED | 1.6 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.6"
+        level: "2"
+        title: Ensure hardware MFA is enabled for the 'root' user account
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get IAM List Virtual MFA Devices"
+    shell: aws iam list-virtual-mfa-devices
+    register: aws_iam_list_virtual_mfa_devices_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format IAM List Virtual MFA Devices"
+    set_fact:
+      aws_iam_list_virtual_mfa_devices: "{{ aws_iam_list_virtual_mfa_devices_raw.stdout | from_json | default([],true) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: "VirtualMFADevices[? contains(to_string(SerialNumber),`root-account-mfadevice`) ]"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ aws_iam_list_virtual_mfa_devices | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_iam_list_virtual_mfa_devices | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_6
+  tags:
+    - level2
+    - section1
+    - rule_1.6
+
+
+- name: AUTOMATED | 1.7 | AUDIT | Eliminate use of the 'root' user for administrative and daily tasks
+  block:
+  - name: AUTOMATED | 1.7 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.7"
+        level: "1"
+        title: Eliminate use of the 'root' user for administrative and daily tasks
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: "[?user == `<root_account>`].{password_last_used:password_last_used, access_key_1_last_used_date: access_key_1_last_used_date,access_key_2_last_used_date:access_key_2_last_used_date}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: Not Available
+          target: Not Available
+          status: [ 'manual', 'manual', 'manual' ]
+          evidence: "{{ aws_iam_get_credential_report | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_7
+  tags:
+    - level1
+    - section1
+    - rule_1.7
+
+
+- name: AUTOMATED | 1.8 | AUDIT | Ensure IAM password policy requires minimum length of 14 or greater
+  block:
+  - name: AUTOMATED | 1.8 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.8"
+        level: "1"
+        title: Ensure IAM password policy requires minimum length of 14 or greater
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: "PasswordPolicy.{MinimumPasswordLength:MinimumPasswordLength}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "PasswordPolicy.MinimumPasswordLength"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ aws_iam_get_account_password_policy | json_query(source_query) | int >= 14 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_iam_get_account_password_policy | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    shell: aws iam update-account-password-policy --minimum-password-length 14
+    changed_when: true
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+  when:
+    - awscis_rule_1_8
+  tags:
+    - level1
+    - section1
+    - rule_1.8
+
+
+- name: AUTOMATED | 1.9 | AUDIT | Ensure IAM password policy prevents password reuse
+  block:
+  - name: AUTOMATED | 1.9 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.9"
+        level: "1"
+        title: Ensure IAM password policy prevents password reuse
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: "PasswordPolicy.{PasswordReusePrevention:PasswordReusePrevention}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "PasswordPolicy.PasswordReusePrevention"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ aws_iam_get_account_password_policy | json_query(source_query) | int >= 24 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_iam_get_account_password_policy | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    shell: aws iam update-account-password-policy --password-reuse-prevention 24
+    changed_when: true
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+  when:
+    - awscis_rule_1_9
+  tags:
+    - level1
+    - section1
+    - rule_1.9
+
+
+- name: AUTOMATED | 1.10 | AUDIT | Ensure multi-factor authentication (MFA) is enabled for all IAM users that have a console password
+  block:
+  - name: AUTOMATED | 1.10 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.10"
+        level: "1"
+        title: Ensure multi-factor authentication (MFA) is enabled for all IAM users that have a console password
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?password_enabled == `"true"` && mfa_active == `"false"`]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ aws_iam_get_credential_report | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_iam_get_credential_report | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_10
+  tags:
+    - level1
+    - section1
+    - rule_1.10
+
+
+- name: AUTOMATED | 1.11 | AUDIT | Do not setup access keys during initial user setup for all IAM users that have a console password
+  block:
+  - name: AUTOMATED | 1.11 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.11"
+        level: "1"
+        title: Do not setup access keys during initial user setup for all IAM users that have a console password
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?password_enabled == `"true"`  && ((access_key_1_active == `"true"` && access_key_1_last_used_date == `"N/A"`) || (access_key_2_active == `"true"` && access_key_2_last_used_date == `"N/A"`))]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ aws_iam_get_credential_report | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_iam_get_credential_report | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually due to HIGH COMPLEXITY"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_11
+  tags:
+    - level1
+    - section1
+    - rule_1.11
+
+
+- name: AUTOMATED | 1.12 | AUDIT | Ensure credentials unused for 45 days or greater are disabled
+  block:
+  - name: AUTOMATED | 1.12 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.12"
+        level: "1"
+        title: Ensure credentials unused for 45 days or greater are disabled
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Transformed Fact
+    set_fact:
+      transformed:
+        user: "{{ item.user }}"
+        password_enabled: "{{ item.password_enabled }}"
+        password_last_used: "{{ item.password_last_used }}"
+        password_used_recently: "{{ ((ansible_date_time.iso8601[:19] | to_datetime('%Y-%m-%dT%H:%M:%S')) - ((('2021-01-01T00:00:01+00:00' if item.password_last_used == 'N/A' else item.password_last_used) | string | split('+'))[0] | to_datetime('%Y-%m-%dT%H:%M:%S'))).days | int <= threshold_key_last_used_days }}"
+        access_key_1_active: "{{ item.access_key_1_active }}"
+        access_key_1_last_used_date: "{{ item.access_key_1_last_used_date }}"
+        access_key_1_used_recently: "{{ ((ansible_date_time.iso8601[:19] | to_datetime('%Y-%m-%dT%H:%M:%S')) - ((('2021-01-01T00:00:01+00:00' if item.access_key_1_last_used_date == 'N/A' else item.access_key_1_last_used_date) | string | split('+'))[0] | to_datetime('%Y-%m-%dT%H:%M:%S'))).days | int <= threshold_key_last_used_days }}"
+        access_key_2_active: "{{ item.access_key_2_active }}"
+        access_key_2_last_used_date: "{{ item.access_key_2_last_used_date }}"
+        access_key_2_used_recently: "{{ ((ansible_date_time.iso8601[:19] | to_datetime('%Y-%m-%dT%H:%M:%S')) - ((('2021-01-01T00:00:01+00:00' if item.access_key_2_last_used_date == 'N/A' else item.access_key_2_last_used_date) | string | split('+'))[0] | to_datetime('%Y-%m-%dT%H:%M:%S'))).days | int <= threshold_key_last_used_days }}"
+    loop: "{{ aws_iam_get_credential_report }}"
+    register: transformed_loop
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Transformed Fact"
+    set_fact:
+      transformed_unused_credential_list: "{{ transformed_loop.results | json_query('[].ansible_facts.transformed') }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?(access_key_1_active == `"true"` && access_key_1_used_recently == `false`) || (access_key_2_active == `"true"` && access_key_2_used_recently == `false`) || (password_enabled == `"true"` && password_used_recently == `false`)]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ transformed_unused_credential_list | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ transformed_unused_credential_list | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_12
+  tags:
+    - level1
+    - section1
+    - rule_1.12
+
+
+- name: AUTOMATED | 1.13 | AUDIT | Ensure there is only one active access key available for any single IAM user
+  block:
+  - name: AUTOMATED | 1.13 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.13"
+        level: "1"
+        title: Ensure there is only one active access key available for any single IAM user
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get IAM Access Key List"
+    shell: |
+      aws iam list-access-keys --user-name {{ item.UserName }} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{}'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.UserName="{{ item.UserName }}"'
+    loop: "{{ aws_iam_list_users | json_query('Users') }}"
+    register: aws_iam_list_access_keys_raw
+    changed_when: false
+    failed_when: aws_iam_list_access_keys_raw.rc == 1
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format IAM Access Key List"
+    set_fact:
+      aws_iam_list_access_keys: '{{ aws_iam_list_access_keys_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[? length(AccessKeyMetadata) > `1`]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ aws_iam_list_access_keys | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_iam_list_access_keys | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually due to HIGH COMPLEXITY"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_13
+  tags:
+    - level1
+    - section1
+    - rule_1.13
+
+
+- name: AUTOMATED | 1.14 | AUDIT | Ensure access keys are rotated every 90 days or less
+  block:
+  - name: AUTOMATED | 1.14 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.14"
+        level: "1"
+        title: Ensure access keys are rotated every 90 days or less
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Transformed Fact
+    set_fact:
+      transformed:
+        user: "{{ item.user }}"
+        access_key_1_active: "{{ item.access_key_1_active }}"
+        access_key_1_last_rotated: "{{ item.access_key_1_last_rotated }}"
+        access_key_1_rotated_recently: "{{ ((ansible_date_time.iso8601[:19] | to_datetime('%Y-%m-%dT%H:%M:%S')) - ((('2021-01-01T00:00:01+00:00' if item.access_key_1_last_rotated == 'N/A' else item.access_key_1_last_rotated) | string | split('+'))[0] | to_datetime('%Y-%m-%dT%H:%M:%S'))).days | int <= threshold_key_rotation_days }}"
+        access_key_2_active: "{{ item.access_key_2_active }}"
+        access_key_2_last_rotated: "{{ item.access_key_2_last_rotated }}"
+        access_key_2_rotated_recently: "{{ ((ansible_date_time.iso8601[:19] | to_datetime('%Y-%m-%dT%H:%M:%S')) - ((('2021-01-01T00:00:01+00:00' if item.access_key_2_last_rotated == 'N/A' else item.access_key_2_last_rotated) | string | split('+'))[0] | to_datetime('%Y-%m-%dT%H:%M:%S'))).days | int <= threshold_key_rotation_days }}"
+    loop: "{{ aws_iam_get_credential_report }}"
+    register: transformed_loop
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Transformed Fact"
+    set_fact:
+      transformed_access_key_rotation_list: "{{ transformed_loop.results | json_query('[].ansible_facts.transformed') }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?(access_key_1_active == `"true"` && access_key_1_rotated_recently == `false`) || (access_key_2_active == `"true"` && access_key_2_rotated_recently == `false`)]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ transformed_access_key_rotation_list | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ transformed_access_key_rotation_list | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually due to HIGH COMPLEXITY"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_14
+  tags:
+    - level1
+    - section1
+    - rule_1.14
+
+
+- name: AUTOMATED | 1.15 | AUDIT | Ensure IAM Users Receive Permissions Only Through Groups
+  block:
+  - name: AUTOMATED | 1.15 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.15"
+        level: "1"
+        title: Ensure IAM Users Receive Permissions Only Through Groups | User Policies
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get IAM List Attached User Policies"
+    shell: |
+      aws iam list-attached-user-policies --user-name {{ item.UserName }} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{}'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.UserName="{{ item.UserName }}"'
+    loop: "{{ aws_iam_list_users | json_query('Users') }}"
+    register: aws_iam_list_attached_user_policies_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format IAM List Attached User Policies"
+    set_fact:
+      aws_iam_list_attached_user_policies: '{{ aws_iam_list_attached_user_policies_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get IAM List User Policies"
+    shell: |
+      aws iam list-user-policies --user-name {{ item.UserName }} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{}'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.UserName="{{ item.UserName }}"'
+    loop: "{{ aws_iam_list_users | json_query('Users') }}"
+    register: aws_iam_list_user_policies_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format IAM List User Policies"
+    set_fact:
+      aws_iam_list_user_policies: '{{ aws_iam_list_user_policies_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Combined Dictionary Loop"
+    set_fact:
+      combined_dictionary: "{{ aws_iam_list_user_policies | selectattr('UserName', 'equalto', item.UserName) | combine(item) }}"
+    loop: "{{ aws_iam_list_attached_user_policies }}"
+    register: combined_dictionary_loop
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Combined Dictionary List "
+    set_fact:
+      combined_user_policy_details_list: "{{ combined_dictionary_loop.results | json_query('[].ansible_facts.combined_dictionary') }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?AttachedPolicies != `[]` || PolicyNames != `[]`]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ combined_user_policy_details_list | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ combined_user_policy_details_list | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_15
+  tags:
+    - level1
+    - section1
+    - rule_1.15
+
+
+- name: AUTOMATED | 1.16 | AUDIT | Ensure IAM policies that allow full "*:*" administrative privileges are not attached
+  block:
+  - name: AUTOMATED | 1.16 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.16"
+        level: "1"
+        title: Ensure IAM policies that allow full "*:*" administrative privileges are not attached
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get IAM List Policies Only Attached"
+    shell: aws iam list-policies --only-attached
+    register: aws_iam_list_policies_only_attached_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format IAM List Policies Only Attached"
+    set_fact:
+      aws_iam_list_policies_only_attached: "{{ aws_iam_list_policies_only_attached_raw.stdout | from_json }}"
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get IAM Get Policy Version Only Attached"
+    shell: |
+      aws iam get-policy-version --policy-arn {{ item.Arn }} --version-id {{ item.DefaultVersionId }} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{}'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.PolicyName="{{ item.PolicyName }}"'
+    loop: "{{ aws_iam_list_policies_only_attached | json_query('Policies') }}"
+    register: aws_iam_get_attached_policy_version_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format IAM Get Policy Version Only Attached"
+    set_fact:
+      aws_iam_get_attached_policy_version: '{{ aws_iam_get_attached_policy_version_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?PolicyVersion.Document.Statement[?Effect == `Allow` && Resource == `*` && Action == `*`]]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ aws_iam_get_attached_policy_version | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_iam_get_attached_policy_version | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_16
+  tags:
+    - level1
+    - section1
+    - rule_1.16
+
+
+- name: AUTOMATED | 1.17 | AUDIT | Ensure a support role has been created to manage incidents with AWS Support
+  block:
+  - name: AUTOMATED | 1.17 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.17"
+        level: "1"
+        title: Ensure a support role has been created to manage incidents with AWS Support
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get IAM List Policies Just AWSSupportAccess"
+    shell: aws iam list-policies --query "Policies[?PolicyName == 'AWSSupportAccess'].Arn | [0]"
+    register: support_access_policy_arn_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format IAM List Policies Just AWSSupportAccess"
+    set_fact:
+      support_access_policy_arn: "{{ support_access_policy_arn_raw.stdout | from_json }}"
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get IAM List Entities For Policy"
+    shell: aws iam list-entities-for-policy --policy-arn {{ support_access_policy_arn }}
+    register: entities_attached_to_support_access_policy_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format IAM List Entities For Policy"
+    set_fact:
+      entities_attached_to_support_access_policy: "{{ entities_attached_to_support_access_policy_raw.stdout | from_json }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '{PolicyRoles:PolicyRoles}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "PolicyRoles == `[]`"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ entities_attached_to_support_access_policy | json_query(source_query) }}"
+          target: false
+          status: ['pass','fail','unknown']
+          evidence: "{{ entities_attached_to_support_access_policy | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_1_17
+  tags:
+    - level1
+    - section1
+    - rule_1.17
+
+
+- name: MANUAL | 1.18 | AUDIT | Ensure IAM instance roles are used for AWS resource access from instances
+  block:
+  - name: MANUAL | 1.18 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.18"
+        level: "2"
+        title: Ensure IAM instance roles are used for AWS resource access from instances
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: Not Available
+          target: Not Available
+          status: [ 'manual', 'manual', 'manual' ]
+          evidence: "[]"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+    when: awscis_write_rule_results
+  when:
+    - awscis_rule_1_18
+    - do_manual
+  tags:
+    - section1
+    - level2
+    - audit
+    - rule_1.18
+
+
+- name: AUTOMATED | 1.19 | AUDIT | Ensure that all the expired SSL/TLS certificates stored in AWS IAM are removed
+  block:
+  - name: AUTOMATED | 1.19 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.19"
+        level: "1"
+        title: Ensure that all the expired SSL/TLS certificates stored in AWS IAM are removed
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get IAM List Server Certificates"
+    shell: aws iam list-server-certificates
+    register: aws_iam_list_server_certificates_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format IAM List Server Certificates"
+    set_fact:
+      aws_iam_list_server_certificates: "{{ aws_iam_list_server_certificates_raw.stdout | from_json }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: 'ServerCertificateMetadataList'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_exception: "{{ (aws_iam_list_server_certificates | json_query(evidence_query) == []) | bool }}"
+        test: 
+          source: "{{ aws_iam_list_server_certificates | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_iam_list_server_certificates | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Exception' if this_rule.is_exception else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ 'No Expired Certificates Exist' if this_rule.is_exception else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Delete Expired Certificates
+    shell: aws iam delete-server-certificate --server-certificate-name {{ item.ServerCertificateName }}
+    loop: "{{ aws_iam_list_server_certificates | json_query(evidence_query) }}"
+    changed_when: true
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+  when:
+    - awscis_rule_1_19
+  tags:
+    - level1
+    - section1
+    - rule_1.19
+
+
+- name: AUTOMATED | 1.20 | AUDIT | Ensure that IAM Access analyzer is enabled for all regions
+  block:
+  - name: AUTOMATED | 1.20 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.20"
+        level: "1"
+        title: Ensure that IAM Access analyzer is enabled for all regions
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get IAM Access Key List"
+    shell: |
+      aws accessanalyzer list-analyzers --region {{ item }} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{}'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.Region="{{ item }}"'
+    loop: "{{ region_list }}"
+    register: aws_accessanalyzer_list_analyzers_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format IAM Access Key List"
+    set_fact:
+      aws_accessanalyzer_list_analyzers: '{{ aws_accessanalyzer_list_analyzers_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?analyzers == `[]`]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: "{{ aws_accessanalyzer_list_analyzers | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_accessanalyzer_list_analyzers | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Delete Expired Certificates
+    shell: aws accessanalyzer create-analyzer --analyzer-name "access-analyzer-{{ item.Region }}" --type ACCOUNT --region {{ item.Region }}
+    loop: "{{ aws_accessanalyzer_list_analyzers | json_query(evidence_query) }}"
+    changed_when: true
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+  when:
+    - awscis_rule_1_20
+  tags:
+    - level1
+    - section1
+    - rule_1.20
+
+
+- name: MANUAL | 1.21 | AUDIT | Ensure IAM users are managed centrally via identity federation or AWS Organizations for multi-account environments
+  block:
+  - name: MANUAL | 1.21 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "1.21"
+        level: "2"
+        title: Ensure IAM users are managed centrally via identity federation or AWS Organizations for multi-account environments
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: Not Available
+          target: Not Available
+          status: [ 'manual', 'manual', 'manual' ]
+          evidence: "[]"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+    when: awscis_write_rule_results
+  when:
+    - awscis_rule_1_21
+    - do_manual
+  tags:
+    - section1
+    - level2
+    - audit
+    - rule_1.21

@@ -1,0 +1,10 @@
+---
+# SECTION | 2 | Storage
+- name: "SECTION | 2.1 | Simple Storage Service (S3)"
+  include: cis_2.1.x.yml
+
+- name: "SECTION | 2.2 | Elastic Compute Cloud (EC2)"
+  include: cis_2.2.x.yml
+
+- name: "SECTION | 2.3 | Relational Database Service (RDS)"
+  include: cis_2.3.x.yml

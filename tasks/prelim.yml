@@ -1,0 +1,15 @@
+---
+- name: PRELIM | Set AWS Configuration Files
+  block:
+
+  - name: PRELIM | Set 'aws_access_key_id'
+    command: "aws configure set aws_access_key_id {{ aws_user.access_key_id }}"
+    changed_when: false
+
+  - name: PRELIM | Set 'aws_secret_access_key'
+    command: "aws configure set aws_secret_access_key {{ aws_user.secret_access_key }}"
+    changed_when: false
+
+  - name: PRELIM | Set 'default.region'
+    command: "aws configure set default.region {{ aws_default_region }}"
+    changed_when: false

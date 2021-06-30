@@ -1,0 +1,218 @@
+---
+# Disable/Enable whole sections (Default is for all)
+awscis_section1: true
+awscis_section2: true
+awscis_section3: true
+awscis_section4: true
+awscis_section5: true
+
+# Write rule_results object to JSON file
+awscis_write_rule_results: true
+
+# Set to false to skip manual steps (steps that have both manual audit and manual patch)
+do_manual: true
+
+# Set to false to skip prereqs 
+check_prereqs: true
+
+# We've defined complexity-high to mean that we cannot automatically remediate
+# the rule in question.  In the future this might mean that the remediation
+# may fail in some cases.
+complexity_high: no
+
+# We've defined disruption-high to indicate items that are likely to cause
+# disruption in a normal workflow.  These items can be remediated automatically
+# but are disabled by default to avoid disruption.
+disruption_high: true
+
+# Show "changed" for disruptive items not remediated per disruption-high
+# setting to make them stand out.
+audit_disruptive: yes
+
+#set to false to skip tasks that either have not been developed or cannot be automated
+is_implemented: false
+
+#set to false to skip tasks that have a bug or error
+is_buggy: false
+
+# These variables correspond with the CIS IDs defined in the CIS and allows you to enable/disable specific rules.
+# PLEASE NOTE: These work in coordination with the cat1, cat2, cat3 group variables. You must enable an entire group
+# in order for the variables below to take effect.
+
+# 121 total
+# These variables correspond with the CIS rule IDs or paragraph numbers defined in
+# the CIS benchmark documents.
+# PLEASE NOTE: These work in coordination with the section # group variables and tags.
+# You must enable an entire section in order for the variables below to take effect.
+# Section 1 rules
+# Section 1 is Identity and Access Management
+awscis_rule_1_1: true
+awscis_rule_1_2: true
+awscis_rule_1_3: true
+awscis_rule_1_4: true
+awscis_rule_1_5: true
+awscis_rule_1_6: true
+awscis_rule_1_7: true
+awscis_rule_1_8: true
+awscis_rule_1_9: true
+awscis_rule_1_10: true
+awscis_rule_1_11: true
+awscis_rule_1_12: true
+awscis_rule_1_13: true
+awscis_rule_1_14: true
+awscis_rule_1_15: true
+awscis_rule_1_16: true
+awscis_rule_1_17: true
+awscis_rule_1_18: true
+awscis_rule_1_19: true
+awscis_rule_1_20: true
+awscis_rule_1_21: true
+
+
+# Section 2 rules
+# Section 2 is Storage
+awscis_rule_2_1_1: true
+awscis_rule_2_1_2: true
+awscis_rule_2_1_3: true
+awscis_rule_2_1_4: true
+awscis_rule_2_1_5: true
+awscis_rule_2_2_1: true
+awscis_rule_2_3_1: true
+
+# Section 3 rules
+# Section 3 is Logging
+awscis_rule_3_1: true
+awscis_rule_3_2: true
+awscis_rule_3_3: true
+awscis_rule_3_4: true
+awscis_rule_3_5: true
+awscis_rule_3_6: true
+awscis_rule_3_7: true
+awscis_rule_3_8: true
+awscis_rule_3_9: true
+awscis_rule_3_10: true
+awscis_rule_3_11: true
+
+# Section 4 rules
+# Section 4 is Monitoring
+awscis_rule_4_1: true
+awscis_rule_4_2: true
+awscis_rule_4_3: true
+awscis_rule_4_4: true
+awscis_rule_4_5: true
+awscis_rule_4_6: true
+awscis_rule_4_7: true
+awscis_rule_4_8: true
+awscis_rule_4_9: true
+awscis_rule_4_10: true
+awscis_rule_4_11: true
+awscis_rule_4_12: true
+awscis_rule_4_13: true
+awscis_rule_4_14: true
+awscis_rule_4_15: true
+
+# Section 5 rules
+# Section 5 is Networking
+awscis_rule_5_1: true
+awscis_rule_5_2: true
+awscis_rule_5_3: true
+awscis_rule_5_4: true
+
+
+# End User Specific Variables
+aws_cli_runway_path: "/home/vagrant/runway/aws-cli"
+rule_results_path: "/home/vagrant/output.json"
+temp_csv_file_path: "/tmp/temp.csv"
+
+region_list: [
+  "us-west-1",
+  "us-west-2"
+]
+
+# Section 1 Variables
+# 1.14
+threshold_key_last_used_days: 45
+# 1.14
+threshold_key_rotation_days: 90
+
+# Section 3 Variables
+# 3.1
+multi_regional_cloud_trail_bucket: "aws-foundations-cloudtrail-bucket"
+multi_regional_cloud_trail_name: "my-multi-regional-cloudtrail"
+multi_regional_cloud_trail_region: "us-west-1"
+
+# 3.4
+cloudtrail_log_group_arn: "arn:aws:logs:us-west-1:661425364937:log-group:my-multi-regional-cloudtrail:log-stream:661425364937_CloudTrail_us-west-1*"
+cloudtrail_cloudwatchLogs_role_arn: "arn:aws:iam::661425364937:role/service-role/my-multi-regional-cloudtrail"
+
+# 3.5
+configservice_existing_s3bucket: "my-config-bucket"
+configservice_existing_sns_topic_suffix: "my-sns-topic"
+configservice_iam_role: "arn:aws:iam::{{ aws_user.account_number }}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"
+
+# 3.7
+cloudtrail_kms_id: "arn:aws:kms:us-west-2:661425364937:key/b7d7ea10-c123-4b4a-a136-8e6600005325"
+
+# Section 4 Variables
+sns_topic_name: "my-sns-topic"
+metric_namespace: "CISBenchmark"
+
+# 4.1
+unauthorized_api_calls_metric: "unauthorized-api-calls-metric"
+unauthorized_api_calls_alarm: "unauthorized-api-calls-alarm"
+
+# 4.2
+no_mfa_console_signin_metric: "no-mfa-console-signin-metric"
+no_mfa_console_signin_alarm: "no-mfa-console-signin-alarm"
+
+# 4.3
+root_usage_metric: "root-usage-metric"
+root_usage_alarm: "root-usage-alarm"
+
+# 4.4
+iam_changes_metric: "iam-changes-metric"
+iam_changes_alarm: "iam-changes-alarm"
+
+# 4.5
+cloudtrail_cfg_changes_metric: "cloudtrail-cfg-changes-metric"
+cloudtrail_cfg_changes_alarm: "cloudtrail-cfg-changes-alarm"
+
+# 4.6
+console_signin_failure_metric: "console-signin-failure-metric"
+console_signin_failure_alarm: "console-signin-failure-alarm"
+
+# 4.7
+disable_or_delete_cmk_changes_metric: "disable-or-delete-cmk-changes-metric"
+disable_or_delete_cmk_changes_alarm: "disable-or-delete-cmk-changes-alarm"
+
+# 4.8
+s3_bucket_policy_changes_metric: "s3-bucket-policy-changes-metric"
+s3_bucket_policy_changes_alarm: "s3-bucket-policy-changes-alarm"
+
+# 4.9
+aws_config_changes_metric: "aws-config-changes-metric"
+aws_config_changes_alarm: "aws-config-changes-alarm"
+
+# 4.10
+security_group_changes_metric: "security-group-changes-metric"
+security_group_changes_alarm: "security-group-changes-alarm"
+
+# 4.11
+nacl_changes_metric: "nacl-changes-metric"
+nacl_changes_alarm: "nacl-changes-alarm"
+
+# 4.12
+network_gw_changes_metric: "network-gw-changes-metric"
+network_gw_changes_alarm: "network-gw-changes-alarm"
+
+# 4.13
+route_table_changes_metric: "route-table-changes-metric"
+route_table_changes_alarm: "route-table-changes-alarm"
+
+# 4.14
+vpc_changes_metric: "vpc-changes-metric"
+vpc_changes_alarm: "vpc-changes-alarm"
+
+# 4.15
+organizations_changes_metric: "organizations-changes-metric"
+organizations_changes_alarm: "organizations-changes-alarm"

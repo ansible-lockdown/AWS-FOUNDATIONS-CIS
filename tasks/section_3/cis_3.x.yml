@@ -1,0 +1,746 @@
+---
+- name: "SETUP | SECTION 3 | CloudTrail Describe Trails"
+  block:
+  - name: "SETUP | SECTION 3 | Get CloudTrail Describe Trails"
+    shell: |
+      aws cloudtrail describe-trails --region {{ item}} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{}'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.Region="{{ item }}"'
+    loop: "{{ region_list }}"
+    register: aws_cloudtrail_describe_trails_raw
+    changed_when: false
+  - name: "SETUP | SECTION 3 | Format CloudTrail Describe Trails"
+    set_fact:
+      aws_cloudtrail_describe_trails: '{{ aws_cloudtrail_describe_trails_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  when:
+    - awscis_section3
+    - awscis_rule_3_1 or
+      awscis_rule_3_2 or
+      awscis_rule_3_3 or
+      awscis_rule_3_4 or
+      awscis_rule_3_6 or
+      awscis_rule_3_7 or
+      awscis_rule_3_10 or
+      awscis_rule_3_11
+  tags: 
+    - section3
+    - rule_3.1
+    - rule_3.2
+    - rule_3.3
+    - rule_3.4
+    - rule_3.6
+    - rule_3.7
+    - rule_3.10
+    - rule_3.11
+
+
+- name: AUTOMATED | 3.1 | AUDIT | Ensure CloudTrail is enabled in all regions
+  block:
+  - name: AUTOMATED | 3.1 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "3.1"
+        level: "1"
+        title: Ensure CloudTrail is enabled in all regions
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get MultiRegional CloudTrail Names"
+    set_fact:
+      multi_regional_cloudtrail_names: "{{ aws_cloudtrail_describe_trails | json_query('[].trailList[?IsMultiRegionTrail == `true`][].Name') | unique }}"
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get CloudTrail Status"
+    shell: |
+      aws cloudtrail get-trail-status --name {{ item }} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{}'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.CloudTrailName="{{ item }}"'
+    loop: "{{ multi_regional_cloudtrail_names }}"
+    register: aws_cloudtrail_get_trail_status_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format CloudTrail Status"
+    set_fact:
+      aws_cloudtrail_get_trail_status: '{{ aws_cloudtrail_get_trail_status_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get CloudTrail Event Selectors"
+    shell: |
+      aws cloudtrail get-event-selectors --trail-name {{ item }} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{}'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.CloudTrailName="{{ item }}"'
+    loop: "{{ multi_regional_cloudtrail_names }}"
+    register: aws_cloudtrail_get_event_selectors_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format CloudTrail Event Selectors"
+    set_fact:
+      aws_cloudtrail_get_event_selectors: '{{ aws_cloudtrail_get_event_selectors_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Combined Dictionary Loop"
+    set_fact:
+      combined_dictionary: "{{ aws_cloudtrail_get_trail_status | selectattr('CloudTrailName', 'equalto', item.CloudTrailName) | combine(item) }}"
+    loop: "{{ aws_cloudtrail_get_event_selectors }}"
+    register: combined_dictionary_loop
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Combined Dictionary List "
+    set_fact:
+      combined_dictionary_cloudtrail_details_list: "{{ combined_dictionary_loop.results | json_query('[].ansible_facts.combined_dictionary') }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?IsLogging == `true` && EventSelectors[?IncludeManagementEvents == `true` && ReadWriteType == `All`]].{CloudTrailName:CloudTrailName,IsLogging:IsLogging,EventSelectors:EventSelectors[].{IncludeManagementEvents:IncludeManagementEvents,ReadWriteType:ReadWriteType}}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_failure: "{{ (multi_regional_cloudtrail_names == []) | bool }}"
+        test: 
+          source: "{{ combined_dictionary_cloudtrail_details_list | json_query(source_query) | int > 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ combined_dictionary_cloudtrail_details_list | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ 'No Multi-Regional CloudTrails Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Create Multi-Regional CloudTrail
+    block:
+      - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Create CloudTrail
+        shell: aws cloudtrail create-trail  --name {{ multi_regional_cloud_trail_name }} --s3-bucket-name {{ multi_regional_cloud_trail_bucket }} --is-multi-region-trail
+      - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set CloudTrail to Multi-Regional
+        shell: aws cloudtrail update-trail  --name {{ multi_regional_cloud_trail_name }} --is-multi-region-trail
+      - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Start Multi-Regional CloudTrail
+        shell: aws cloudtrail start-logging --name {{ multi_regional_cloud_trail_name }}
+    changed_when: true
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+  when:
+    - awscis_rule_3_1
+  tags:
+    - level1
+    - section3
+    - rule_3.1
+
+
+- name: AUTOMATED | 3.2 | AUDIT | Ensure CloudTrail log file validation is enabled
+  block:
+  - name: AUTOMATED | 3.2 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "3.2"
+        level: "2"
+        title: Ensure CloudTrail log file validation is enabled
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[].trailList[?LogFileValidationEnabled != `true`].{Name:Name,HomeRegion:HomeRegion,LogFileValidationEnabled:LogFileValidationEnabled}[]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_failure: "{{ aws_cloudtrail_describe_trails == [] | bool }}"
+        test: 
+          source: "{{ aws_cloudtrail_describe_trails | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_cloudtrail_describe_trails | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ 'No CloudTrails Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Create Multi-Regional CloudTrail
+    shell: aws cloudtrail update-trail --name {{ item.Name }} --region {{ item.HomeRegion }} --enable-log-file-validation
+    loop: "{{ aws_cloudtrail_describe_trails | json_query(evidence_query) | unique }}"
+    changed_when: true
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+  when:
+    - awscis_rule_3_2
+  tags:
+    - level2
+    - section3
+    - rule_3.2
+
+
+- name: AUTOMATED | 3.3 | AUDIT | Ensure the S3 bucket used to store CloudTrail logs is not publicly accessible
+  block:
+  - name: AUTOMATED | 3.3 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "3.3"
+        level: "1"
+        title: Ensure the S3 bucket used to store CloudTrail logs is not publicly accessible
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get CloudTrail S3 Bucket List"
+    set_fact:
+      aws_cloudtrail_s3_bucket_list: "{{ aws_cloudtrail_describe_trails | json_query('[].trailList[].S3BucketName') | unique }}"
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get CloudTrail S3 Bucket ACL"
+    shell: |
+      aws s3api get-bucket-acl --bucket {{ item }} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '[]'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.BucketName="{{ item }}"'
+    loop: "{{ aws_cloudtrail_s3_bucket_list }}"
+    register: aws_cloudtrail_s3api_get_bucket_acl_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format CloudTrail S3 Bucket ACL"
+    set_fact:
+      aws_cloudtrail_s3api_get_bucket_acl: '{{ aws_cloudtrail_s3api_get_bucket_acl_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get Bucket Policy"
+    shell: |
+      aws s3api get-bucket-policy --bucket {{ item }} |
+      jq '{"Policy": (.Policy | fromjson)}' |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{"Policy" : null}'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.BucketName="{{ item }}"'
+    loop: "{{ aws_cloudtrail_s3_bucket_list }}"
+    register: aws_cloudtrail_s3api_get_bucket_policy_raw
+    changed_when: false
+    failed_when: aws_cloudtrail_s3api_get_bucket_policy_raw.rc == 1
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Bucket Policy"
+    set_fact:
+      aws_cloudtrail_s3api_get_bucket_policy: '{{ aws_cloudtrail_s3api_get_bucket_policy_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Combined Dictionary Loop"
+    set_fact:
+      combined_dictionary: "{{ aws_cloudtrail_s3api_get_bucket_acl | selectattr('BucketName', 'equalto', item.BucketName) | combine(item) }}"
+    loop: "{{ aws_cloudtrail_s3api_get_bucket_policy }}"
+    register: combined_dictionary_loop
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Combined Dictionary List "
+    set_fact:
+      combined_dictionary_cloudtrail_bucket_details_list: "{{ combined_dictionary_loop.results | json_query('[].ansible_facts.combined_dictionary') }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?Policy.Statement[?Effect == `Allow` && (Principal == `*` || Principal.AWS == `*`)] || Grants[?Grantee.URI == `http://acs.amazonaws.com/groups/global/AllUsers` || Grantee.URI == `http://acs.amazonaws.com/groups/global/AuthenticatedUsers`]]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_failure: "{{ aws_cloudtrail_describe_trails == [] | bool }}"
+        test: 
+          source: "{{ combined_dictionary_cloudtrail_bucket_details_list | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ combined_dictionary_cloudtrail_bucket_details_list | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ 'No CloudTrails Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_3_3
+  tags:
+    - level1
+    - section3
+    - rule_3.3
+
+
+- name: AUTOMATED | 3.4 | AUDIT | Ensure CloudTrail trails are integrated with CloudWatch Logs
+  block:
+  - name: AUTOMATED | 3.4 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "3.4"
+        level: "1"
+        title: Ensure CloudTrail trails are integrated with CloudWatch Logs
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get CloudTrail S3 Bucket List"
+    set_fact:
+      aws_cloudtrail_cloudwatch_logs: "{{ aws_cloudtrail_describe_trails | json_query('[].trailList[].{CloudTrailName:Name,CloudWatchLogsLogGroupArn:CloudWatchLogsLogGroupArn,HomeRegion:HomeRegion}') }}"
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get Bucket Policy"
+    shell: |
+      aws cloudtrail get-trail-status --name {{ item.CloudTrailName }} --region {{ item.HomeRegion }} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '[]'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.CloudTrailName="{{ item.CloudTrailName }}"'
+    loop: "{{ aws_cloudtrail_cloudwatch_logs | json_query('[?CloudWatchLogsLogGroupArn != `null`]') | unique }}"
+    register: aws_cloudtrail_get_trail_status_raw
+    changed_when: false
+    failed_when: aws_cloudtrail_get_trail_status_raw.rc == 1
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Bucket Policy"
+    set_fact:
+      aws_cloudtrail_get_trail_status: '{{ aws_cloudtrail_get_trail_status_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Combined Dictionary Loop"
+    set_fact:
+      combined_dictionary: "{{ aws_cloudtrail_get_trail_status | selectattr('CloudTrailName', 'equalto', item.CloudTrailName) | combine(item) }}"
+    loop: "{{ aws_cloudtrail_cloudwatch_logs }}"
+    register: combined_dictionary_loop
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Combined Dictionary List "
+    set_fact:
+      combined_dictionary_cloudtrail_cloudwatch_details_list: "{{ combined_dictionary_loop.results | json_query('[].ansible_facts.combined_dictionary') }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Transform Query
+    set_fact:
+      transform_query: '[].{CloudTrailName:CloudTrailName,CloudWatchLogsLogGroupArn:CloudWatchLogsLogGroupArn,LatestCloudWatchLogsDeliveryTime:LatestCloudWatchLogsDeliveryTime,HomeRegion:HomeRegion}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Transform Fact
+    set_fact:
+      transformed:
+        LastCloudWatchLogsDeliveryIsRecent: "{{ ((ansible_date_time.iso8601[:19] | to_datetime('%Y-%m-%dT%H:%M:%S')) - (( (item.LatestCloudWatchLogsDeliveryTime | default('2021-01-01T00:00:01.000000+00:00',true)) | string | split('.'))[0] | to_datetime('%Y-%m-%dT%H:%M:%S'))).days | int <= 1 }}"
+        CloudTrailName: "{{ item.CloudTrailName }}"
+        CloudWatchLogsLogGroupArn: "{{ item.CloudWatchLogsLogGroupArn }}"
+        HomeRegion: "{{ item.HomeRegion }}"
+    loop: "{{ combined_dictionary_cloudtrail_cloudwatch_details_list | json_query(transform_query)}}"
+    register: transformed_loop
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Combined Dictionary List "
+    set_fact:
+      transformed_dictionary_cloudtrail_cloudwatch_details_list: "{{ transformed_loop.results | json_query('[].ansible_facts.transformed') }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?LastCloudWatchLogsDeliveryIsRecent != `true`]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_failure: "{{ aws_cloudtrail_describe_trails == [] | bool }}"
+        test: 
+          source: "{{ transformed_dictionary_cloudtrail_cloudwatch_details_list | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ transformed_dictionary_cloudtrail_cloudwatch_details_list | json_query(evidence_query) | unique }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ 'No CloudTrails Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Update CloudTrail
+    shell: >
+      aws cloudtrail update-trail
+      --name                           {{ item.CloudTrailName }}
+      --region                         {{ item.HomeRegion }}
+      --cloud-watch-logs-log-group-arn {{ cloudtrail_log_group_arn }}
+      --cloud-watch-logs-role-arn      {{ cloudtrail_log_group_arn }}
+    loop: "{{ transformed_dictionary_cloudtrail_cloudwatch_details_list | json_query(evidence_query) | unique }}"
+    changed_when: true
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+      - is_implemented
+  when:
+    - awscis_rule_3_4
+  tags:
+    - level1
+    - section3
+    - rule_3.4
+
+
+- name: AUTOMATED | 3.5 | AUDIT | Ensure AWS Config is enabled in all regions
+  block:
+  - name: AUTOMATED | 3.5 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "3.5"
+        level: "2"
+        title: Ensure AWS Config is enabled in all regions
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get Config Service Describe Configuration Recorders"
+    shell: |
+      aws configservice describe-configuration-recorders --region {{ item }} |
+      jq -r '.Region="{{ item }}"'
+    loop: "{{ region_list }}"
+    register: aws_configservice_describe_configuration_recorders_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Config Service Describe Configuration Recorders"
+    set_fact:
+      aws_configservice_describe_configuration_recorders: '{{ aws_configservice_describe_configuration_recorders_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get Config Service Describe Configuration Recorder Status"
+    shell: |
+      aws configservice describe-configuration-recorder-status --region {{ item }} |
+      jq -r '.Region="{{ item }}"'
+    loop: "{{ region_list }}"
+    register: aws_configservice_describe_configuration_recorder_status_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Config Service Describe Configuration Recorder Status"
+    set_fact:
+      aws_configservice_describe_configuration_recorder_status: '{{ aws_configservice_describe_configuration_recorder_status_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get Combined Dictionary Loop"
+    set_fact:
+      combined_dictionary: "{{ aws_configservice_describe_configuration_recorder_status | selectattr('Region', 'equalto', item.Region) | combine(item) }}"
+    loop: "{{ aws_configservice_describe_configuration_recorders }}"
+    register: combined_dictionary_loop
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Combined Dictionary Loop"
+    set_fact:
+      aws_configservice_describe_configuration_recorder_status_details: "{{ combined_dictionary_loop.results | json_query('[].ansible_facts.combined_dictionary') }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?ConfigurationRecordersStatus == `[]` || ConfigurationRecorders == `[]` || ConfigurationRecorders[?recordingGroup.allSupported != `true` || recordingGroup.includeGlobalResourceTypes != `true`] || ConfigurationRecordersStatus[?lastStatus != `SUCCESS` || recording != `true`]].{Region:Region,ConfigurationRecorders:ConfigurationRecorders[].{name:name,recordingGroup:recordingGroup.{allSupported:allSupported,includeGlobalResourceTypes:includeGlobalResourceTypes}},ConfigurationRecordersStatus:ConfigurationRecordersStatus[].{name:name,lastStatus:lastStatus,recording:recording}}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_failure: "{{ (aws_configservice_describe_configuration_recorders == []) | bool }}"
+        test: 
+          source: "{{ aws_configservice_describe_configuration_recorder_status_details | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_configservice_describe_configuration_recorder_status_details | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ 'No Configuration Recorders Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Implement Config Service
+    block:
+    - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Config Service Subscribe 
+      shell: aws configservice subscribe --region {{ item.Region }} --s3-bucket {{ configservice_existing_s3bucket }} --sns-topic arn:aws:sns:{{ item.Region }}:{{ aws_user.account_number }}:{{ configservice_existing_sns_topic_suffix }} --iam-role {{ configservice_iam_role }}
+      loop: "{{ aws_configservice_describe_configuration_recorder_status_details | json_query(evidence_query) }}"
+      register: aws_configservice_subscribe_raw
+      changed_when: true
+      failed_when: aws_configservice_subscribe_raw.rc == 1
+    - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Config Service Put Configuration Recorder
+      shell: aws configservice put-configuration-recorder --region {{ item.Region }} --configuration-recorder name=default,roleARN={{ configservice_iam_role }} --recording-group allSupported=true,includeGlobalResourceTypes=true
+      loop: "{{ aws_configservice_describe_configuration_recorder_status_details | json_query(evidence_query) }}"
+      changed_when: true
+    - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Config Service Start Configuration Recorder
+      shell: aws configservice start-configuration-recorder --region {{ item.Region }} --configuration-recorder-name "default" 
+      loop: "{{ aws_configservice_describe_configuration_recorder_status_details | json_query(evidence_query) }}"
+      changed_when: true
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+  when:
+    - awscis_rule_3_5
+  tags:
+    - level2
+    - section3
+    - rule_3.5
+
+
+- name: AUTOMATED | 3.6 | AUDIT | Ensure S3 bucket access logging is enabled on the CloudTrail S3 bucket
+  block:
+  - name: AUTOMATED | 3.6 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "3.6"
+        level: "1"
+        title: Ensure S3 bucket access logging is enabled on the CloudTrail S3 bucket
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get CloudTrail S3 Bucket Names
+    set_fact:
+      cloudtrail_bucket_names: "{{ aws_cloudtrail_describe_trails | json_query('[].trailList[].[S3BucketName][]') | unique }}"
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get Bucket Logging"
+    shell: |
+      aws s3api get-bucket-logging --bucket {{ item }} |
+      { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{"LoggingEnabled" : null}'; else echo "${ARRAY[@]}"; fi; } |
+      jq -r '.BucketName="{{ item }}"'
+    loop: "{{ cloudtrail_bucket_names }}"
+    register: aws_s3api_get_bucket_logging_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Bucket Logging"
+    set_fact:
+      aws_s3api_get_bucket_logging: '{{ aws_s3api_get_bucket_logging_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?LoggingEnabled == `null`]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_failure: "{{ aws_cloudtrail_describe_trails == [] | bool }}"
+        test: 
+          source: "{{ aws_s3api_get_bucket_logging | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_s3api_get_bucket_logging | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ 'No CloudTrails Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }}
+    debug:
+      msg: "This must be done manually"
+    changed_when: true
+    when:
+      - is_implemented
+  when:
+    - awscis_rule_3_6
+  tags:
+    - level1
+    - section3
+    - rule_3.6
+
+
+- name: AUTOMATED | 3.7 | AUDIT | Ensure CloudTrail logs are encrypted at rest using KMS CMKs
+  block:
+  - name: AUTOMATED | 3.7 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "3.7"
+        level: "2"
+        title: Ensure CloudTrail logs are encrypted at rest using KMS CMKs
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[].trailList[?!not_null(KmsKeyId)].{Name:Name, KmsKeyId: KmsKeyId,HomeRegion:HomeRegion}[]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_failure: "{{ aws_cloudtrail_describe_trails == [] | bool }}"
+        test: 
+          source: "{{ aws_cloudtrail_describe_trails | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_cloudtrail_describe_trails | json_query(evidence_query) | unique }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ 'No CloudTrails Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | CloudTrail Update Trail
+    shell: aws cloudtrail update-trail --region {{ item.HomeRegion }} --name {{ item.Name }} --kms-key-id {{ cloudtrail_kms_id }}
+    loop: "{{ aws_cloudtrail_describe_trails | json_query(evidence_query) | unique }}"
+    changed_when: true
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+  when:
+    - awscis_rule_3_7
+  tags:
+    - level2
+    - section3
+    - rule_3.7
+
+
+- name: AUTOMATED | 3.8 | AUDIT | Ensure rotation for customer created CMKs is enabled
+  block:
+  - name: AUTOMATED | 3.8 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "3.8"
+        level: "2"
+        title: Ensure rotation for customer created CMKs is enabled
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get KMS Key List"
+    shell: |
+      aws kms list-keys --region {{ item }} |
+      jq -r '.region="{{ item }}"'
+    loop: "{{ region_list }}"
+    register: aws_kms_list_keys_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format KMS Key List"
+    set_fact:
+      aws_kms_list_keys: '{{ aws_kms_list_keys_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get List of KMS ARNs"
+    set_fact:
+      kms_arn_list: '{{ aws_kms_list_keys | json_query("[[].Keys[].KeyArn | []][]") }}'
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get KMS Key Rotation Status"
+    shell: |
+      aws kms get-key-rotation-status --key-id {{ item }} --region {{ (item | split(":"))[3] }} |
+      jq -r '.KeyArn="{{ item }}"' |
+      jq -r '.region="{{ (item | split(":"))[3] }}"'
+    loop: "{{ kms_arn_list }}"
+    register: aws_kms_get_key_rotation_status_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format KMS Key Rotation Status"
+    set_fact:
+      aws_kms_get_key_rotation_status: '{{ aws_kms_get_key_rotation_status_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?KeyRotationEnabled != `true`]'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_failure: "{{ aws_kms_list_keys == [] | bool }}"
+        test: 
+          source: "{{ aws_kms_get_key_rotation_status | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_kms_get_key_rotation_status | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ 'No KMS Keys Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | CloudTrail Update Trail
+    shell: aws kms enable-key-rotation --key-id {{ item.KeyArn }} --region {{ item.region }}
+    loop: "{{ aws_kms_get_key_rotation_status | json_query(evidence_query) }}"
+    register: aws_kms_enable_key_rotation
+    changed_when: true
+    failed_when: aws_kms_enable_key_rotation.rc == 1
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+  when:
+    - awscis_rule_3_8
+  tags:
+    - level2
+    - section3
+    - rule_3.8
+
+
+- name: MANUAL | 3.9 | AUDIT | Ensure VPC flow logging is enabled in all VPCs
+  block:
+  - name: MANUAL | 3.9 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "3.9"
+        level: "2"
+        title: Ensure VPC flow logging is enabled in all VPCs
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        test: 
+          source: Not Available
+          target: Not Available
+          status: [ 'manual', 'manual', 'manual' ]
+          evidence: "[]"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+  - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+    when: awscis_write_rule_results
+  when:
+    - awscis_rule_3_9
+    - do_manual
+  tags:
+    - section3
+    - level2
+    - audit
+    - rule_3.9
+
+
+- name: AUTOMATED | 3.10 | AUDIT | Ensure that Object-level logging for write events is enabled for S3 bucket or
+        AUTOMATED | 3.10 | AUDIT | Ensure that Object-level logging for read events is enabled for S3 bucket
+  block:
+  - name: AUTOMATED | 3.10 | AUDIT | Set Facts for This Rule
+    set_fact:
+      this_rule:
+        id: "3.10"
+        level: "2"
+        title: Ensure that Object-level logging for write events is enabled for S3 bucket
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get CloudTrail Event Selectors"
+    shell: |
+      aws cloudtrail get-event-selectors --region {{ item.HomeRegion }} --trail-name {{ item.Name }} |
+      jq -r '.HomeRegion="{{ item.HomeRegion }}"' |
+      jq -r '.Name="{{ item.Name }}"'
+    loop: "{{ aws_cloudtrail_describe_trails | json_query('[].trailList[]') | unique }}"
+    register: aws_cloudtrail_get_event_selectors_raw
+    changed_when: false
+  - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format CloudTrail Event Selectors"
+    set_fact:
+      aws_cloudtrail_get_event_selectors: '{{ aws_cloudtrail_get_event_selectors_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
+    set_fact:
+      evidence_query: '[?EventSelectors[?ReadWriteType != `All` && DataResources != `[]`]].{Region:HomeRegion,Name:Name,EventSelectors:EventSelectors[].{DataResources:DataResources,ReadWriteType:ReadWriteType}}'
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
+    set_fact:
+      source_query: "length({{ evidence_query }})"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
+    set_fact:
+      this_rule: 
+        id: "{{ this_rule.id }}"
+        level: "{{ this_rule.level }}"
+        title: "{{ this_rule.title }}"
+        is_failure: "{{ aws_cloudtrail_describe_trails == [] | bool }}"
+        test: 
+          source: "{{ aws_cloudtrail_get_event_selectors | json_query(source_query) | int == 0 }}"
+          target: true
+          status: ['pass','fail','unknown']
+          evidence: "{{ aws_cloudtrail_get_event_selectors | json_query(evidence_query) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
+    set_fact:
+      assessment:
+        - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
+          rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
+          result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
+          evidence: "{{ 'No CloudTrails Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
+    set_fact:
+      rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+  - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | CloudTrail Put Event Selectors
+    shell: >
+      aws cloudtrail put-event-selectors
+      --region {{ item.Region }}
+      --trail-name {{ item.Name }}
+      --event-selectors '[{ "ReadWriteType": "All", "IncludeManagementEvents":true, "DataResources": [{ "Type": "AWS::S3::Object", "Values": ["arn:aws:s3"] }] }]'
+    loop: "{{ aws_cloudtrail_get_event_selectors | json_query(evidence_query) }}"
+    changed_when: true
+    when:
+      - disruption_high
+      - this_rule.test.source == false
+  when:
+    - awscis_rule_3_10
+    - awscis_rule_3_11
+  tags:
+    - level2
+    - section3
+    - rule_3.10
+    - rule_3.11

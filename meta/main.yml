@@ -1,0 +1,20 @@
+---
+galaxy_info:
+    author: "Ryan Speelman (ryan@refactr.it) "
+    description: "Ansible playbook with a role to remediate an AWS account based on the CIS_Amazon_Web_Services_Foundations_Benchmark_v1.4.0"
+    company: "Refactr"
+    license: MIT
+    min_ansible_version: 2.9
+
+    platforms:
+        - name: Amazon Web Services
+
+    galaxy_tags:
+        - system
+        - security
+        - cis
+        - hardening
+        - aws
+        - benchmark
+
+    dependencies: []

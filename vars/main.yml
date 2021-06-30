@@ -1,0 +1,4 @@
+---
+# Put "constants" in this file
+
+local_bin_dir: "/usr/bin"
