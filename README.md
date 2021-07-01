@@ -6,13 +6,13 @@ Based on [CIS Amazon Web Services Foundations Benchmark 1.4.0 ](https://workbenc
 
 Caution(s)
 -------
-This role **will make changes to the subscription** which may have unintended concequences. This is not an auditing tool but rather a remediation tool to be used after an audit has been conducted.
+This role **will make changes to the subscription** which may have unintended consequences. This is not an auditing tool but rather a remediation tool to be used after an audit has been conducted.
 
-This role was developed against a new Azure Tenant and subscription. If you are implimenting to an existing tenant and subscription(s) please review this role for any site specific changes that are needed.
+This role was developed against a new Azure Tenant and subscription. If you are implementing to an existing tenant and subscription(s) please review this role for any site specific changes that are needed.
 
 To use release version please point to main branch
 
-Additional costs may be incured for specific features
+Additional costs may be incurred for specific features
 - 1.1 Sounds expensive
 
 
@@ -25,7 +25,7 @@ Requirements
 ------------
 - RHEL 8 or CentOS 8 to execute the playbook/role
 - AWS Tenant 
-  - A IAM with the following access:
+  - A IAM with AdministratorAccess permissions
 
 Dependencies
 ------------
@@ -35,8 +35,6 @@ Dependencies
 
 Known Issues
 ------------
-- 1.1
-  - ⚠ Something bad
 - 1.11
   - 🔩HIGH COMPLEXITY. Need a way to determine which access key to delete
 - 1.13
