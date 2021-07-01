@@ -6,9 +6,9 @@ Based on [CIS Amazon Web Services Foundations Benchmark 1.4.0 ](https://workbenc
 
 Caution(s)
 -------
-This role **will make changes to the subscription** which may have unintended consequences. This is not an auditing tool but rather a remediation tool to be used after an audit has been conducted.
+This role **will make changes to the account** which may have unintended consequences. This is not an auditing tool but rather a remediation tool to be used after an audit has been conducted.
 
-This role was developed against a new Azure Tenant and subscription. If you are implementing to an existing tenant and subscription(s) please review this role for any site specific changes that are needed.
+This role was developed against a new AWS account. If you are implementing to an existing account please review this role for any site specific changes that are needed.
 
 To use release version please point to main branch
 
