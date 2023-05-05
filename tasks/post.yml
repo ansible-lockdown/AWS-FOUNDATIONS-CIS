@@ -1,0 +1,16 @@
+---
+
+- name: FINAL | Write 'rule_results' object to file
+  ansible.builtin.copy:
+      content: "{{ rule_results | default([]) | to_nice_json }}"
+      dest: "{{ rule_results_path }}"
+  changed_when: false
+  when: awscis_write_rule_results
+  tags:
+      - always
+
+- name: FINAL | Show 'rule_results' Object
+  ansible.builtin.debug:
+      msg: "{{ rule_results | default([]) }}"
+  tags:
+      - always

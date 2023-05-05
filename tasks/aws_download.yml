@@ -1,0 +1,26 @@
+---
+
+- name: PREREQ | Download and install AWS CLI
+  block:
+
+  - name: PREREQ | Created extraction directory
+    ansible.builtin.file:
+        path: "{{ aws_cli_extracted_dir }}"
+        mode: 0755
+        state: directory
+
+  - name: PREREQ | Download AWS CLI
+    ansible.builtin.get_url:
+        url: "{{ awscli_url }}"
+        dest: "{{ aws_cli_download_dir }}/awscliv2.zip"
+        mode: '0440'
+
+  - name: PREREQ | Extract AWS CLI
+    ansible.builtin.unarchive:
+        src: "{{ aws_cli_download_dir }}/awscliv2.zip"
+        dest: "{{ aws_cli_extracted_dir }}"
+        remote_src: true
+
+  - name: PREREQ | Capture AWS version to be installed
+    ansible.builtin.shell: "{{ aws_cli_extracted_dir }}aws/dist/aws | awk '{print $1}' | cut -d '/' -f2"
+    register: aws_cli_extracted_ver
