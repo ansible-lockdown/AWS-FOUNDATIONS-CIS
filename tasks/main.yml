@@ -8,48 +8,59 @@
       - always
 
 - name: Check ansible version
-  fail:
-    msg: You must use ansible 2.9 or greater
-  when: not ansible_version.full is version_compare('2.9', '>=')
+  ansible.builtin.assert:
+      that: ansible_version.full is version_compare( ansible_min_version, '>=')
+      fail_msg: You must use ansible {{ ansible_min_version }} or greater
+      success_msg: Ansible version is supported
   tags:
-  - always
+      - always
 
-- import_tasks: check_prereqs.yml
-  become: no
-  when: check_prereqs | bool
-  tags: 
-    - prereqs
+# - name: Check AWS variable have been added
+#   ansible.builtin.assert:
+#     that:
+#       - aws_user.access_key_id is defined
+#       - aws_user.secret_access_key
+#       - aws_default_region
+#     fail_msg: Please ensure that all aws user variables have been set
+#     success_msg: AWS user settings are set
+#   tags:
+#       - always
 
-- import_tasks: prelim.yml
-  tags: 
-    - prelim_tasks
-    - always
-
-- include: section_1/main.yml
-  when: awscis_section1 | bool
+- name: Run Prerequisites
+  ansible.builtin.import_tasks: prereqs.yml
+  when: check_prereqs
   tags:
-  - section1
+      - prereqs
 
-- include: section_2/main.yml
-  when: awscis_section2 | bool
+- name: Run Section 1 tasks
+  ansible.builtin.import_tasks: section_1/main.yml
+  when: awscis_section1
   tags:
-  - section2
+      - section1
 
-
-- include: section_3/main.yml
-  when: awscis_section3 | bool
+- name: Run Section 2 tasks
+  ansible.builtin.import_tasks: section_2/main.yml
+  when: awscis_section2
   tags:
-  - section3
+      - section2
 
-- include: section_4/main.yml
-  when: awscis_section4 | bool
+- name: Run Section 3 tasks
+  ansible.builtin.import_tasks: section_3/main.yml
+  when: awscis_section3
   tags:
-  - section4
+      - section3
 
-- include: section_5/main.yml
-  when: awscis_section5 | bool
+- name: Run Section 4 tasks
+  ansible.builtin.import_tasks: section_4/main.yml
+  when: awscis_section4
   tags:
-  - section5
+      - section4
 
-- name: End
-  import_tasks: end.yml
+- name: Run Section 5 tasks
+  ansible.builtin.import_tasks: section_5/main.yml
+  when: awscis_section5
+  tags:
+      - section5
+
+- name: Post
+  ansible.builtin.import_tasks: post.yml

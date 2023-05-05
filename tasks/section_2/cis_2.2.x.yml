@@ -2,30 +2,35 @@
 - name: AUTOMATED | 2.2.1 | AUDIT | Ensure EBS volume encryption is enabled
   block:
   - name: AUTOMATED | 2.2.1 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "2.2.1"
         level: "1"
         title: Ensure EBS volume encryption is enabled
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get EBS Encryption By Default"
-    shell: |
+    ansible.builtin.shell: |
       aws --region {{ item }} ec2 get-ebs-encryption-by-default |
       jq -r '.Region ="{{ item }}"'
     loop: "{{ region_list }}"
     register: aws_ec2_get_ebs_encryption_by_default_raw
     changed_when: false
     failed_when: aws_ec2_get_ebs_encryption_by_default_raw.rc == 1
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format EBS Encryption By Default"
-    set_fact:
+    ansible.builtin.set_fact:
       aws_ec2_get_ebs_encryption_by_default: '{{ aws_ec2_get_ebs_encryption_by_default_raw | json_query("results[*].stdout") | map("from_json") | list | default([],true) }}' 
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: '[?EbsEncryptionByDefault != `true`]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -35,18 +40,21 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_ec2_get_ebs_encryption_by_default | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put EBS Encryption By Default
-    shell: aws ec2 enable-ebs-encryption-by-default --region {{ item.Region }} 
+    ansible.builtin.shell: aws ec2 enable-ebs-encryption-by-default --region {{ item.Region }} 
     loop: "{{ aws_ec2_get_ebs_encryption_by_default | json_query(evidence_query) }}"
     changed_when: true
     when:

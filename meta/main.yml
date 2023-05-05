@@ -1,13 +1,15 @@
 ---
-galaxy_info:
-    author: "Ryan Speelman (ryan@refactr.it) "
-    description: "Ansible playbook with a role to remediate an AWS account based on the CIS_Amazon_Web_Services_Foundations_Benchmark_v1.4.0"
-    company: "Refactr"
-    license: MIT
-    min_ansible_version: 2.9
 
+galaxy_info:
+    author: "Ryan Speelman (ryan@refactr.it), uk-bolly"
+    description: "Ansible playbook with a role to remediate an AWS account based on the CIS_Amazon_Web_Services_Foundations_Benchmark_v1.4.0"
+    company: "MindPoint Group"
+    namespace: mindpointgroup
+    role_name: aws_foundations_cis
+    min_ansible_version: 2.10.1
+    license: MIT
     platforms:
-        - name: Amazon Web Services
+        - name: Amazon
 
     galaxy_tags:
         - system
@@ -16,5 +18,4 @@ galaxy_info:
         - hardening
         - aws
         - benchmark
-
     dependencies: []

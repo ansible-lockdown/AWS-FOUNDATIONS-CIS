@@ -1,17 +1,16 @@
 ---
-- hosts: localhost
-  connection: local
+
+- hosts: all
   gather_facts: true
   vars:
-    benchmark:
-      name: "{{ 'CIS Amazon Web Services Foundations Benchmark' | replace(' ','_') }}"
-      version: 1.4.0
-      profile: "{{ }}"
-  become: true
+      benchmark:
+          name: "{{ 'CIS Amazon Web Services Foundations Benchmark' | replace(' ','_') }}"
+          version: 1.4.0
+          profile: "{{ }}"
+  become: false
   collections:
-    - azure.azcollection
-    - ansible.posix
+      - azure.azcollection
+      - ansible.posix
   roles:
-    - role: "{{ playbook_dir }}"
-      system_is_container: "{{ is_container | default(false) }}"
-
+      - role: "{{ playbook_dir }}"
+        system_is_container: "{{ is_container | default(false) }}"

@@ -1,4 +1,5 @@
 ---
+
 # Disable/Enable whole sections (Default is for all)
 awscis_section1: true
 awscis_section2: true
@@ -6,19 +7,28 @@ awscis_section3: true
 awscis_section4: true
 awscis_section5: true
 
+# AWS CLI Setup
+aws_install: true
+# If to try and upgrade aws cli
+aws_cli_upgrade: false
+
+# Location to download and extract aws_cli bundle
+aws_cli_download_dir: /var/tmp
+aws_cli_extracted_dir: "{{ aws_cli_download_dir }}/extracted"
+
 # Write rule_results object to JSON file
 awscis_write_rule_results: true
 
 # Set to false to skip manual steps (steps that have both manual audit and manual patch)
 do_manual: true
 
-# Set to false to skip prereqs 
+# Set to false to skip prereqs
 check_prereqs: true
 
 # We've defined complexity-high to mean that we cannot automatically remediate
 # the rule in question.  In the future this might mean that the remediation
 # may fail in some cases.
-complexity_high: no
+complexity_high: false
 
 # We've defined disruption-high to indicate items that are likely to cause
 # disruption in a normal workflow.  These items can be remediated automatically
@@ -27,12 +37,12 @@ disruption_high: true
 
 # Show "changed" for disruptive items not remediated per disruption-high
 # setting to make them stand out.
-audit_disruptive: yes
+audit_disruptive: true
 
-#set to false to skip tasks that either have not been developed or cannot be automated
+# set to false to skip tasks that either have not been developed or cannot be automated
 is_implemented: false
 
-#set to false to skip tasks that have a bug or error
+# set to false to skip tasks that have a bug or error
 is_buggy: false
 
 # These variables correspond with the CIS IDs defined in the CIS and allows you to enable/disable specific rules.
@@ -67,7 +77,6 @@ awscis_rule_1_18: true
 awscis_rule_1_19: true
 awscis_rule_1_20: true
 awscis_rule_1_21: true
-
 
 # Section 2 rules
 # Section 2 is Storage
@@ -118,15 +127,14 @@ awscis_rule_5_2: true
 awscis_rule_5_3: true
 awscis_rule_5_4: true
 
-
 # End User Specific Variables
 aws_cli_runway_path: "/home/vagrant/runway/aws-cli"
 rule_results_path: "/home/vagrant/output.json"
 temp_csv_file_path: "/tmp/temp.csv"
 
 region_list: [
-  "us-west-1",
-  "us-west-2"
+    "us-west-1",
+    "us-west-2"
 ]
 
 # Section 1 Variables

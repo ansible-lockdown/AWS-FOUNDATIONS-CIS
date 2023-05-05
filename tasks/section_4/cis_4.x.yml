@@ -2,48 +2,57 @@
 - name: "SETUP | SECTION 4 | Describe Multi-Regional CloudTrail"
   block:
   - name: "SETUP | SECTION 4 | Get Describe Multi-Regional CloudTrail"
-    shell: aws cloudtrail describe-trails --trail-name-list {{ multi_regional_cloud_trail_name }} --region {{ multi_regional_cloud_trail_region }}
+    ansible.builtin.shell: aws cloudtrail describe-trails --trail-name-list {{ multi_regional_cloud_trail_name }} --region {{ multi_regional_cloud_trail_region }}
     register: aws_cloudtrail_describe_multi_regional_trail_raw
     changed_when: false
+
   - name: "SETUP | SECTION 4 | Format Describe Multi-Regional CloudTrail"
-    set_fact:
+    ansible.builtin.set_fact:
       aws_cloudtrail_describe_multi_regional_trail: "{{ aws_cloudtrail_describe_multi_regional_trail_raw.stdout | from_json | default([],true) }}"
+
   - name: "SETUP | SECTION 4 | Get Multi-Regional CloudWatch Log Group ARN"
-    set_fact:
+    ansible.builtin.set_fact:
       multi_regional_cloudwatch_logs_log_group_arn: "{{ aws_cloudtrail_describe_multi_regional_trail | json_query('trailList[].CloudWatchLogsLogGroupArn | [0]') }}"
+
   - name: "SETUP | SECTION 4 | Set Log Group Facts"
-    set_fact:
+    ansible.builtin.set_fact:
       multi_regional_log_group_name: "{{ (multi_regional_cloudwatch_logs_log_group_arn | split(':'))[6] }}"
       multi_regional_log_group_region: "{{ (multi_regional_cloudwatch_logs_log_group_arn | split(':'))[3] }}"
+
   - name: "SETUP | SECTION 4 | Get Log Describe Metric Filters"
-    shell:  aws logs describe-metric-filters --log-group-name {{ multi_regional_log_group_name }} --region {{ multi_regional_log_group_region }}
+    ansible.builtin.shell:  aws logs describe-metric-filters --log-group-name {{ multi_regional_log_group_name }} --region {{ multi_regional_log_group_region }}
     register: aws_logs_describe_metric_filters_raw
     changed_when: false
+
   - name: "SETUP | SECTION 4 | Format Log Describe Metric Filters"
-    set_fact:
+    ansible.builtin.set_fact:
       aws_logs_describe_metric_filters: "{{ aws_logs_describe_metric_filters_raw.stdout | from_json | default([],true) }}"
+
   - name: "SETUP | SECTION 4 | Get SNS Topics"
-    shell: aws sns list-topics
+    ansible.builtin.shell: aws sns list-topics
     register: aws_sns_list_topics_raw
     changed_when: false
+
   - name: "SETUP | SECTION 4 | Format SNS Topics"
-    set_fact:
+    ansible.builtin.set_fact:
       aws_sns_list_topics: "{{ aws_sns_list_topics_raw.stdout | from_json | default([],true) }}"
       sns_topic_query: 'length(Topics[?contains(to_string(TopicArn),`{{ sns_topic_name }}`)])'
       sns_topic_arn_query: 'Topics[?contains(to_string(TopicArn),`my-sns-topic`)].TopicArn | [0]'
+
   - name: "SETUP | SECTION 4 | Create SNS Topic"
-    shell: aws sns create-topic --name {{ sns_topic_name }}
+    ansible.builtin.shell: aws sns create-topic --name {{ sns_topic_name }}
     register: aws_cloudtrail_describe_multi_regional_trail_raw
     changed_when: true
     when: aws_sns_list_topics | json_query(sns_topic_query) | int == 0
+
   - name: "SETUP | SECTION 4 | Get SNS Topics again"
-    shell: aws sns list-topics
+    ansible.builtin.shell: aws sns list-topics
     register: aws_sns_list_topics_raw
     changed_when: false
-  - name: "SETUP | SECTION 4 | Get SNS Topic ARN"
-    set_fact:
-      sns_topic_arn: "{{ aws_sns_list_topics_raw.stdout | from_json | default([],true) | json_query(sns_topic_arn_query) }}"
 
+  - name: "SETUP | SECTION 4 | Get SNS Topic ARN"
+    ansible.builtin.set_fact:
+      sns_topic_arn: "{{ aws_sns_list_topics_raw.stdout | from_json | default([],true) | json_query(sns_topic_arn_query) }}"
   when:
     - awscis_section4
     - awscis_rule_4_1 or
@@ -79,23 +88,25 @@
     - rule_4.14
     - rule_4.15
 
-
 - name: AUTOMATED | 4.1 | AUDIT | Ensure a log metric filter and alarm exist for unauthorized API calls
   block:
   - name: AUTOMATED | 4.1 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.1"
         level: "1"
         title: Ensure a log metric filter and alarm exist for unauthorized API calls
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.errorCode = \"*UnauthorizedOperation\") || ($.errorCode = \"AccessDenied*\") || ($.sourceIPAddress!=\"delivery.logs.amazonaws.com\") || ($.eventName!=\"HeadBucket\")`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -106,20 +117,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ unauthorized_api_calls_metric }}
@@ -127,8 +141,9 @@
           --filter-pattern '{($.errorCode = "*UnauthorizedOperation") || ($.errorCode = "AccessDenied*") || ($.sourceIPAddress!="delivery.logs.amazonaws.com") || ($.eventName!="HeadBucket") }'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ unauthorized_api_calls_alarm }}'
           --metric-name '{{ unauthorized_api_calls_metric }}'
@@ -151,23 +166,25 @@
     - section4
     - rule_4.1
 
-
 - name: AUTOMATED | 4.2 | AUDIT | Ensure a log metric filter and alarm exist for Management Console sign-in without MFA
   block:
   - name: AUTOMATED | 4.2 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.2"
         level: "1"
         title: Ensure a log metric filter and alarm exist for Management Console sign-in without MFA
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventName = \"ConsoleLogin\") && ($.additionalEventData.MFAUsed != \"Yes\") && ($.userIdentity.type = \"IAMUser\") && ($.responseElements.ConsoleLogin = \"Success\")`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -178,20 +195,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ no_mfa_console_signin_metric }}
@@ -199,8 +219,9 @@
           --filter-pattern '{($.eventName = "ConsoleLogin") && ($.additionalEventData.MFAUsed != "Yes") && ($.userIdentity.type = "IAMUser") && ($.responseElements.ConsoleLogin = "Success") }'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ no_mfa_console_signin_alarm }}'
           --metric-name '{{ no_mfa_console_signin_metric }}'
@@ -223,23 +244,25 @@
     - section4
     - rule_4.2
 
-
 - name: AUTOMATED | 4.3 | AUDIT | Ensure a log metric filter and alarm exist for usage of 'root' account
   block:
   - name: AUTOMATED | 4.3 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.3"
         level: "1"
         title: Ensure a log metric filter and alarm exist for usage of 'root' account
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`$.userIdentity.type = \"Root\" && $.userIdentity.invokedBy NOT EXISTS && $.eventType != \"AwsServiceEvent\"`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -250,20 +273,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ root_usage_metric }}
@@ -271,8 +297,9 @@
           --filter-pattern '{ $.userIdentity.type = "Root" && $.userIdentity.invokedBy NOT EXISTS && $.eventType != "AwsServiceEvent" }'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ root_usage_alarm }}'
           --metric-name '{{ root_usage_metric }}'
@@ -295,23 +322,25 @@
     - section4
     - rule_4.3
 
-
 - name: AUTOMATED | 4.4 | AUDIT | Ensure a log metric filter and alarm exist for IAM policy changes
   block:
   - name: AUTOMATED | 4.4 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.4"
         level: "1"
         title: Ensure a log metric filter and alarm exist for IAM policy changes
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventName=DeleteGroupPolicy)||($.eventName=DeleteRolePolicy)||($.eventName=DeleteUserPolicy)||($.eventName=PutGroupPolicy)||($.eventName=PutRolePolicy)||($.eventName=PutUserPolicy)||($.eventName=CreatePolicy)||($.eventName=DeletePolicy)||($.eventName=CreatePolicyVersion)||($.eventName=DeletePolicyVersion)||($.eventName=AttachRolePolicy)||($.eventName=DetachRolePolicy)||($.eventName=AttachUserPolicy)||($.eventName=DetachUserPolicy)||($.eventName=AttachGroupPolicy)||($.eventName=DetachGroupPolicy)`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -322,20 +351,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ iam_changes_metric }}
@@ -343,8 +375,9 @@
           --filter-pattern '{($.eventName=DeleteGroupPolicy)||($.eventName=DeleteRolePolicy)||($.eventName=DeleteUserPolicy)||($.eventName=PutGroupPolicy)||($.eventName=PutRolePolicy)||($.eventName=PutUserPolicy)||($.eventName=CreatePolicy)||($.eventName=DeletePolicy)||($.eventName=CreatePolicyVersion)||($.eventName=DeletePolicyVersion)||($.eventName=AttachRolePolicy)||($.eventName=DetachRolePolicy)||($.eventName=AttachUserPolicy)||($.eventName=DetachUserPolicy)||($.eventName=AttachGroupPolicy)||($.eventName=DetachGroupPolicy)}'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ iam_changes_alarm }}'
           --metric-name '{{ iam_changes_metric }}'
@@ -367,23 +400,25 @@
     - section4
     - rule_4.4
 
-
 - name: AUTOMATED | 4.5 | AUDIT | Ensure a log metric filter and alarm exist for CloudTrail configuration changes
   block:
   - name: AUTOMATED | 4.5 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.5"
         level: "1"
         title: Ensure a log metric filter and alarm exist for CloudTrail configuration changes
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventName = CreateTrail) || ($.eventName = UpdateTrail) || ($.eventName = DeleteTrail) || ($.eventName = StartLogging) || ($.eventName = StopLogging)`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -394,20 +429,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ cloudtrail_cfg_changes_metric }}
@@ -415,8 +453,9 @@
           --filter-pattern '{($.eventName = CreateTrail) || ($.eventName = UpdateTrail) || ($.eventName = DeleteTrail) || ($.eventName = StartLogging) || ($.eventName = StopLogging)}'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ cloudtrail_cfg_changes_alarm }}'
           --metric-name '{{ cloudtrail_cfg_changes_metric }}'
@@ -432,7 +471,6 @@
       - disruption_high
       - this_rule.test.source == false or
         this_rule.is_failure
-
   when:
     - awscis_rule_4_5
   tags:
@@ -440,23 +478,25 @@
     - section4
     - rule_4.5
 
-
 - name: AUTOMATED | 4.6 | AUDIT | Ensure a log metric filter and alarm exist for AWS Management Console authentication failures
   block:
   - name: AUTOMATED | 4.6 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.6"
         level: "2"
         title: Ensure a log metric filter and alarm exist for AWS Management Console authentication failures
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventName = ConsoleLogin) && ($.errorMessage = \"Failed authentication\")`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -467,20 +507,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ console_signin_failure_metric }}
@@ -488,8 +531,9 @@
           --filter-pattern '{($.eventName = ConsoleLogin) && ($.errorMessage = "Failed authentication")}'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ console_signin_failure_alarm }}'
           --metric-name '{{ console_signin_failure_metric }}'
@@ -512,23 +556,25 @@
     - section4
     - rule_4.6
 
-
 - name: AUTOMATED | 4.7 | AUDIT | Ensure a log metric filter and alarm exist for disabling or scheduled deletion of customer created CMKs
   block:
   - name: AUTOMATED | 4.7 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.7"
         level: "2"
         title: Ensure a log metric filter and alarm exist for disabling or scheduled deletion of customer created CMKs
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventSource = kms.amazonaws.com) && (($.eventName=DisableKey)||($.eventName=ScheduleKeyDeletion))`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -539,20 +585,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ disable_or_delete_cmk_changes_metric }}
@@ -560,8 +609,9 @@
           --filter-pattern '{($.eventSource = kms.amazonaws.com) && (($.eventName=DisableKey)||($.eventName=ScheduleKeyDeletion))}'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ disable_or_delete_cmk_changes_alarm }}'
           --metric-name '{{ disable_or_delete_cmk_changes_metric }}'
@@ -584,23 +634,25 @@
     - section4
     - rule_4.7
 
-
 - name: AUTOMATED | 4.8 | AUDIT | Ensure a log metric filter and alarm exist for S3 bucket policy changes
   block:
   - name: AUTOMATED | 4.8 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.8"
         level: "1"
         title: Ensure a log metric filter and alarm exist for S3 bucket policy changes
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventSource = s3.amazonaws.com) && (($.eventName = PutBucketAcl) || ($.eventName = PutBucketPolicy) || ($.eventName = PutBucketCors) || ($.eventName = PutBucketLifecycle) || ($.eventName = PutBucketReplication) || ($.eventName = DeleteBucketPolicy) || ($.eventName = DeleteBucketCors) || ($.eventName = DeleteBucketLifecycle) || ($.eventName = DeleteBucketReplication))`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -611,20 +663,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ s3_bucket_policy_changes_metric }}
@@ -632,8 +687,9 @@
           --filter-pattern '{($.eventSource = s3.amazonaws.com) && (($.eventName = PutBucketAcl) || ($.eventName = PutBucketPolicy) || ($.eventName = PutBucketCors) || ($.eventName = PutBucketLifecycle) || ($.eventName = PutBucketReplication) || ($.eventName = DeleteBucketPolicy) || ($.eventName = DeleteBucketCors) || ($.eventName = DeleteBucketLifecycle) || ($.eventName = DeleteBucketReplication))}'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ s3_bucket_policy_changes_alarm }}'
           --metric-name '{{ s3_bucket_policy_changes_metric }}'
@@ -656,23 +712,25 @@
     - section4
     - rule_4.8
 
-
 - name: AUTOMATED | 4.9 | AUDIT | Ensure a log metric filter and alarm exist for AWS Config configuration changes
   block:
   - name: AUTOMATED | 4.9 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.9"
         level: "2"
         title: Ensure a log metric filter and alarm exist for AWS Config configuration changes
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventSource = config.amazonaws.com) && (($.eventName=StopConfigurationRecorder)||($.eventName=DeleteDeliveryChannel)||($.eventName=PutDeliveryChannel)||($.eventName=PutConfigurationRecorder))`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -683,20 +741,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ aws_config_changes_metric }}
@@ -704,8 +765,9 @@
           --filter-pattern '{($.eventSource = config.amazonaws.com) && (($.eventName=StopConfigurationRecorder)||($.eventName=DeleteDeliveryChannel)||($.eventName=PutDeliveryChannel)||($.eventName=PutConfigurationRecorder))}'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ aws_config_changes_alarm }}'
           --metric-name '{{ aws_config_changes_metric }}'
@@ -728,23 +790,25 @@
     - section4
     - rule_4.9
 
-
 - name: AUTOMATED | 4.10 | AUDIT | Ensure a log metric filter and alarm exist for security group changes
   block:
   - name: AUTOMATED | 4.10 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.10"
         level: "2"
         title: Ensure a log metric filter and alarm exist for security group changes
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventName = AuthorizeSecurityGroupIngress) || ($.eventName = AuthorizeSecurityGroupEgress) || ($.eventName = RevokeSecurityGroupIngress) || ($.eventName = RevokeSecurityGroupEgress) || ($.eventName = CreateSecurityGroup) || ($.eventName = DeleteSecurityGroup)`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -755,20 +819,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ security_group_changes_metric }}
@@ -776,8 +843,9 @@
           --filter-pattern '{($.eventName = AuthorizeSecurityGroupIngress) || ($.eventName = AuthorizeSecurityGroupEgress) || ($.eventName = RevokeSecurityGroupIngress) || ($.eventName = RevokeSecurityGroupEgress) || ($.eventName = CreateSecurityGroup) || ($.eventName = DeleteSecurityGroup) }'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ security_group_changes_alarm }}'
           --metric-name '{{ security_group_changes_metric }}'
@@ -800,23 +868,25 @@
     - section4
     - rule_4.10
 
-
 - name: AUTOMATED | 4.11 | AUDIT | Ensure a log metric filter and alarm exist for changes to Network Access Control Lists (NACL)
   block:
   - name: AUTOMATED | 4.11 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.11"
         level: "2"
         title: Ensure a log metric filter and alarm exist for changes to Network Access Control Lists (NACL)
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventName = CreateNetworkAcl) || ($.eventName = CreateNetworkAclEntry) || ($.eventName = DeleteNetworkAcl) || ($.eventName = DeleteNetworkAclEntry) || ($.eventName = ReplaceNetworkAclEntry) || ($.eventName = ReplaceNetworkAclAssociation)`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -827,20 +897,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ nacl_changes_metric }}
@@ -848,8 +921,9 @@
           --filter-pattern '{ ($.eventName = CreateNetworkAcl) || ($.eventName = CreateNetworkAclEntry) || ($.eventName = DeleteNetworkAcl) || ($.eventName = DeleteNetworkAclEntry) || ($.eventName = ReplaceNetworkAclEntry) || ($.eventName = ReplaceNetworkAclAssociation) }'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ nacl_changes_alarm }}'
           --metric-name '{{ nacl_changes_metric }}'
@@ -872,23 +946,25 @@
     - section4
     - rule_4.11
 
-
 - name: AUTOMATED | 4.12 | AUDIT | Ensure a log metric filter and alarm exist for changes to network gateways
   block:
   - name: AUTOMATED | 4.12 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.12"
         level: "1"
         title: Ensure a log metric filter and alarm exist for changes to network gateways
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventName = CreateCustomerGateway) || ($.eventName = DeleteCustomerGateway) || ($.eventName = AttachInternetGateway) || ($.eventName = CreateInternetGateway) || ($.eventName = DeleteInternetGateway) || ($.eventName = DetachInternetGateway)`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -899,20 +975,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ network_gw_changes_metric }}
@@ -920,8 +999,9 @@
           --filter-pattern '{($.eventName = CreateCustomerGateway) || ($.eventName = DeleteCustomerGateway) || ($.eventName = AttachInternetGateway) || ($.eventName = CreateInternetGateway) || ($.eventName = DeleteInternetGateway) || ($.eventName = DetachInternetGateway)}'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ network_gw_changes_alarm }}'
           --metric-name '{{ network_gw_changes_metric }}'
@@ -944,23 +1024,25 @@
     - section4
     - rule_4.12
 
-
 - name: AUTOMATED | 4.13 | AUDIT | Ensure a log metric filter and alarm exist for route table changes
   block:
   - name: AUTOMATED | 4.13 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.13"
         level: "1"
         title: Ensure a log metric filter and alarm exist for route table changes
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventName = CreateRoute) || ($.eventName = CreateRouteTable) || ($.eventName = ReplaceRoute) || ($.eventName = ReplaceRouteTableAssociation) || ($.eventName = DeleteRouteTable) || ($.eventName = DeleteRoute) || ($.eventName = DisassociateRouteTable)`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -971,20 +1053,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ route_table_changes_metric }}
@@ -992,8 +1077,9 @@
           --filter-pattern '{($.eventName = CreateRoute) || ($.eventName = CreateRouteTable) || ($.eventName = ReplaceRoute) || ($.eventName = ReplaceRouteTableAssociation) || ($.eventName = DeleteRouteTable) || ($.eventName = DeleteRoute) || ($.eventName = DisassociateRouteTable)}'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ route_table_changes_alarm }}'
           --metric-name '{{ route_table_changes_metric }}'
@@ -1016,23 +1102,25 @@
     - section4
     - rule_4.13
 
-
 - name: AUTOMATED | 4.14 | AUDIT | Ensure a log metric filter and alarm exist for VPC changes
   block:
   - name: AUTOMATED | 4.14 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.14"
         level: "1"
         title: Ensure a log metric filter and alarm exist for VPC changes
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventName = CreateVpc) || ($.eventName = DeleteVpc) || ($.eventName = ModifyVpcAttribute) || ($.eventName = AcceptVpcPeeringConnection) || ($.eventName = CreateVpcPeeringConnection) || ($.eventName = DeleteVpcPeeringConnection) || ($.eventName = RejectVpcPeeringConnection) || ($.eventName = AttachClassicLinkVpc) || ($.eventName = DetachClassicLinkVpc) || ($.eventName = DisableVpcClassicLink) || ($.eventName = EnableVpcClassicLink)`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -1043,20 +1131,23 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ vpc_changes_metric }}
@@ -1064,8 +1155,9 @@
           --filter-pattern '{ ($.eventName = CreateVpc) || ($.eventName = DeleteVpc) || ($.eventName = ModifyVpcAttribute) || ($.eventName = AcceptVpcPeeringConnection) || ($.eventName = CreateVpcPeeringConnection) || ($.eventName = DeleteVpcPeeringConnection) || ($.eventName = RejectVpcPeeringConnection) || ($.eventName = AttachClassicLinkVpc) || ($.eventName = DetachClassicLinkVpc) || ($.eventName = DisableVpcClassicLink) || ($.eventName = EnableVpcClassicLink)}'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ vpc_changes_alarm }}'
           --metric-name '{{ vpc_changes_metric }}'
@@ -1088,23 +1180,25 @@
     - section4
     - rule_4.14
 
-
 - name: AUTOMATED | 4.15 | AUDIT | Ensure a log metric filter and alarm exists for AWS Organizations changes
   block:
   - name: AUTOMATED | 4.15 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "4.15"
         level: "1"
         title: Ensure a log metric filter and alarm exists for AWS Organizations changes
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: 'metricFilters[?contains(to_string(filterPattern),`($.eventSource = organizations.amazonaws.com) && (($.eventName = \"AcceptHandshake\") || ($.eventName = \"AttachPolicy\") || ($.eventName = \"CreateAccount\") || ($.eventName = \"CreateOrganizationalUnit\") || ($.eventName = \"CreatePolicy\") || ($.eventName = \"DeclineHandshake\") || ($.eventName = \"DeleteOrganization\") || ($.eventName = \"DeleteOrganizationalUnit\") || ($.eventName = \"DeletePolicy\") || ($.eventName = \"DetachPolicy\") || ($.eventName = \"DisablePolicyType\") || ($.eventName = \"EnablePolicyType\") || ($.eventName = \"InviteAccountToOrganization\") || ($.eventName = \"LeaveOrganization\") || ($.eventName = \"MoveAccount\") || ($.eventName = \"RemoveAccountFromOrganization\") || ($.eventName = \"UpdatePolicy\") || ($.eventName = \"UpdateOrganizationalUnit\"))`)]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -1115,20 +1209,22 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_logs_describe_metric_filters | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Failure' if this_rule.is_failure else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ 'No Multi-Regional CloudTrail Log Metric Filters Exist' if this_rule.is_failure else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Log Metric Filter
     block:
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Log Metric Filter
-        shell: >
+        ansible.builtin.shell: >
           aws logs put-metric-filter
           --log-group-name {{ multi_regional_cloud_trail_name }}
           --filter-name {{ organizations_changes_metric }}
@@ -1136,8 +1232,9 @@
           --filter-pattern '{($.eventSource = organizations.amazonaws.com) && (($.eventName = "AcceptHandshake") || ($.eventName = "AttachPolicy") || ($.eventName = "CreateAccount") || ($.eventName = "CreateOrganizationalUnit") || ($.eventName = "CreatePolicy") || ($.eventName = "DeclineHandshake") || ($.eventName = "DeleteOrganization") || ($.eventName = "DeleteOrganizationalUnit") || ($.eventName = "DeletePolicy") || ($.eventName = "DetachPolicy") || ($.eventName = "DisablePolicyType") || ($.eventName = "EnablePolicyType") || ($.eventName = "InviteAccountToOrganization") || ($.eventName = "LeaveOrganization") || ($.eventName = "MoveAccount") || ($.eventName = "RemoveAccountFromOrganization") || ($.eventName = "UpdatePolicy") || ($.eventName = "UpdateOrganizationalUnit"))}'
           --region {{ multi_regional_cloud_trail_region }}
         changed_when: true
+
       - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Set Log Metric Alarm
-        shell: >
+        ansible.builtin.shell: >
           aws cloudwatch put-metric-alarm
           --alarm-name '{{ organizations_changes_alarm }}'
           --metric-name '{{ organizations_changes_metric }}'

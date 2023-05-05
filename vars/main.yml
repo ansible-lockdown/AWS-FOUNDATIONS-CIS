@@ -1,4 +1,14 @@
 ---
 # Put "constants" in this file
 
-local_bin_dir: "/usr/bin"
+ansible_min_version: 2.10.1
+
+awscli_url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+local_bin_dir: "/usr/local/bin"
+
+aws_cli_install_dir: "/usr/local/aws-cli"
+aws_cli_install_cmd: "{{ aws_cli_extracted_dir }}/aws/install --bin-dir {{ local_bin_dir }}"
+aws_cli_upgrade_cmd: "{{ aws_cli_install_cmd }} --install-dir {{ aws_cli_install_dir }}"
+packages:
+    - unzip
+    - jq

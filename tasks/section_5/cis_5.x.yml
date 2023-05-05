@@ -1,14 +1,16 @@
 ---
+
 - name: MANUAL | 5.1 | AUDIT | Ensure no Network ACLs allow ingress from 0.0.0.0/0 to remote server administration ports
   block:
   - name: MANUAL | 5.1 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "5.1"
         level: "1"
         title: Ensure no Network ACLs allow ingress from 0.0.0.0/0 to remote server administration ports
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -18,15 +20,17 @@
           target: Not Available
           status: [ 'manual', 'manual', 'manual' ]
           evidence: "[]"
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
     when: awscis_write_rule_results
   when:
@@ -38,17 +42,17 @@
     - audit
     - rule_5.1
 
-
 - name: MANUAL | 5.2 | AUDIT | Ensure no security groups allow ingress from 0.0.0.0/0 to remote server administration ports
   block:
   - name: MANUAL | 5.2 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "5.2"
         level: "1"
         title: Ensure no security groups allow ingress from 0.0.0.0/0 to remote server administration ports
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -58,15 +62,17 @@
           target: Not Available
           status: [ 'manual', 'manual', 'manual' ]
           evidence: "[]"
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
     when: awscis_write_rule_results
   when:
@@ -78,17 +84,17 @@
     - audit
     - rule_5.2
 
-
 - name: MANUAL | 5.3 | AUDIT | Ensure the default security group of every VPC restricts all traffic
   block:
   - name: MANUAL | 5.3 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "5.3"
         level: "2"
         title: Ensure the default security group of every VPC restricts all traffic
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -98,15 +104,17 @@
           target: Not Available
           status: [ 'manual', 'manual', 'manual' ]
           evidence: "[]"
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
     when: awscis_write_rule_results
   when:
@@ -118,33 +126,37 @@
     - audit
     - rule_5.3
 
-
 - name: AUTOMATED | 5.4 | AUDIT | Ensure routing tables for VPC peering are "least access"
   block:
   - name: AUTOMATED | 5.4 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "5.4"
         level: "2"
         title: Ensure routing tables for VPC peering are "least access"
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get CloudTrail Event Selectors"
-    shell: |
+    ansible.builtin.shell: |
       aws ec2 describe-route-tables --region {{ item }}|
       jq -r '.Region="{{ item }}"'
     loop: "{{ region_list }}"
     register: aws_ec2_describe_route_tables_raw
     changed_when: false
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format CloudTrail Event Selectors"
-    set_fact:
+    ansible.builtin.set_fact:
       aws_ec2_describe_route_tables: '{{ aws_ec2_describe_route_tables_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: '[].RouteTables[].{RouteTableId:RouteTableId, VpcId:VpcId, Routes:Routes[?not_null(VpcPeeringConnectionId)],AssociatedSubnets:Associations[*].SubnetId}'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -154,18 +166,21 @@
           target: Not Available
           status: [ 'manual', 'manual', 'manual' ]
           evidence: "{{ aws_ec2_describe_route_tables | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Delete non-compliant routes, Create compliant routes
-    debug:
+    ansible.builtin.debug:
       msg: "This must be done manually"
     changed_when: true
     when:

@@ -2,11 +2,12 @@
 - name: "SETUP | SECTION 2 | S3 Bucket List"
   block:
   - name: "SETUP | SECTION 2 | Get S3 Bucket List"
-    command: aws s3api list-buckets
+    ansible.builtin.shell: aws s3api list-buckets
     register: aws_s3api_list_buckets_raw
     changed_when: false
+
   - name: "SETUP | SECTION 3 | Format Storage Account List"
-    set_fact:
+    ansible.builtin.set_fact:
       aws_s3api_list_buckets: "{{ aws_s3api_list_buckets_raw.stdout | from_json | default([],true) }}"
       exception_evidence_message: "No S3 Buckets Exist"
   when:
@@ -28,30 +29,34 @@
 - name: AUTOMATED | 2.1.1 | AUDIT | Ensure all S3 buckets employ encryption-at-rest
   block:
   - name: AUTOMATED | 2.1.1 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "2.1.1"
         level: "2"
         title: Ensure all S3 buckets employ encryption-at-rest
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get Bucket Encryption"
-    shell: |
+    ansible.builtin.shell: |
       aws s3api get-bucket-encryption --bucket {{ item.Name }} |
       { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{"ServerSideEncryptionConfiguration" : null}'; else echo "${ARRAY[@]}"; fi; } |
       jq -r '.BucketName="{{ item.Name }}"'
     loop: "{{ aws_s3api_list_buckets | json_query('Buckets') }}"
     register: aws_s3api_get_bucket_encryption_raw
     changed_when: false
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Bucket Encryption"
-    set_fact:
+    ansible.builtin.set_fact:
       aws_s3api_get_bucket_encryption: '{{ aws_s3api_get_bucket_encryption_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: "[] | [?ServerSideEncryptionConfiguration == `null` || ServerSideEncryptionConfiguration.Rules[?ApplyServerSideEncryptionByDefault.SSEAlgorithm != `AES256` && ApplyServerSideEncryptionByDefault.SSEAlgorithm != `aws:kms`]]"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -62,18 +67,21 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_s3api_get_bucket_encryption | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Exception' if this_rule.is_exception else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ exception_evidence_message if this_rule.is_exception else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Bucket Encryption
-    shell: |
+    ansible.builtin.shell: |
       aws s3api put-bucket-encryption --bucket {{ item.BucketName }} --server-side-encryption-configuration '{"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}'
     loop: "{{ aws_s3api_get_bucket_encryption | json_query(evidence_query) }}"
     changed_when: true
@@ -87,17 +95,17 @@
     - section2
     - rule_2.1.1
 
-
 - name: AUTOMATED | 2.1.2 | AUDIT | Ensure S3 Bucket Policy is set to deny HTTP requests
   block:
   - name: AUTOMATED | 2.1.2 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "2.1.2"
         level: "2"
         title: Ensure S3 Bucket Policy is set to deny HTTP requests
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get Bucket Policy"
-    shell: |
+    ansible.builtin.shell: |
       aws s3api get-bucket-policy --bucket {{ item.Name }} |
       jq '{"Policy": (.Policy | fromjson)}' |
       { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{"Policy" : null}'; else echo "${ARRAY[@]}"; fi; } |
@@ -106,17 +114,21 @@
     register: aws_s3api_get_bucket_policy_raw
     changed_when: false
     failed_when: aws_s3api_get_bucket_policy_raw.rc == 1
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Bucket Policy"
-    set_fact:
+    ansible.builtin.set_fact:
       aws_s3api_get_bucket_policy: '{{ aws_s3api_get_bucket_policy_raw | json_query("results[*].stdout") | map("from_json") | list | to_json | default([],true) }}'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: '[?Policy == `null` || (Policy.Statement[?Effect != `Deny`] && Policy.Statement[?Condition.Bool."aws:SecureTransport" != `"false"`])]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -127,18 +139,21 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_s3api_get_bucket_policy | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Exception' if this_rule.is_exception else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ exception_evidence_message if this_rule.is_exception else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Bucket Policy
-    shell: aws s3api put-bucket-policy --bucket {{ item.BucketName }} --policy '{"Statement":[{"Sid":"DenyHttpRequests","Effect":"Deny","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::{{ item.BucketName }}/*"}]}'
+    ansible.builtin.shell: aws s3api put-bucket-policy --bucket {{ item.BucketName }} --policy '{"Statement":[{"Sid":"DenyHttpRequests","Effect":"Deny","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::{{ item.BucketName }}/*"}]}'
     loop: "{{ aws_s3api_get_bucket_policy | json_query(evidence_query) }}"
     changed_when: true
     when:
@@ -151,17 +166,17 @@
     - section2
     - rule_2.1.2
 
-
 - name: AUTOMATED | 2.1.3 | AUDIT | Ensure MFA Delete is enable on S3 buckets
   block:
   - name: AUTOMATED | 2.1.3 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "2.1.3"
         level: "1"
         title: Ensure MFA Delete is enable on S3 buckets
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get Bucket Versioning"
-    shell: |
+    ansible.builtin.shell: |
       aws s3api get-bucket-versioning --bucket {{ item.Name }} |
       { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{"Status" : null}'; else echo "${ARRAY[@]}"; fi; } |
       jq -r '.BucketName="{{ item.Name }}"'
@@ -169,17 +184,21 @@
     register: aws_s3api_get_bucket_versioning_raw
     changed_when: false
     failed_when: aws_s3api_get_bucket_versioning_raw.rc == 1
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Bucket Versioning"
-    set_fact:
+    ansible.builtin.set_fact:
       aws_s3api_get_bucket_versioning: '{{ aws_s3api_get_bucket_versioning_raw | json_query("results[*].stdout") | map("from_json") | list | default([],true) }}' 
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: '[?Status != `Enabled`]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -190,18 +209,21 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_s3api_get_bucket_versioning | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Exception' if this_rule.is_exception else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ exception_evidence_message if this_rule.is_exception else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Bucket Versioning
-    shell: |
+    ansible.builtin.shell: |
       aws s3api put-bucket-versioning --profile my-root-profile --bucket {{ item.BucketName }} --versioning-configuration Status=Enabled,MFADelete=Enabled --mfa "arn:aws:iam::aws_account_id:mfa/root-account-mfa-device passcode"
     loop: "{{ aws_s3api_get_bucket_versioning | json_query(evidence_query) }}"
     changed_when: true
@@ -216,17 +238,17 @@
     - section2
     - rule_2.1.3
 
-
 - name: MANUAL | 2.1.4  | AUDIT | Ensure all data in Amazon S3 has been discovered, classified and secured when required.
   block:
   - name: AUTOMATED | 2.1.4  | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "2.1.4 "
         level: "2"
         title: Ensure all data in Amazon S3 has been discovered, classified and secured when required.
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -237,15 +259,17 @@
           target: Not Available
           status: [ 'manual', 'manual', 'manual' ]
           evidence: "[]"
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'exception' if this_rule.is_exception else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ exception_evidence_message if this_rule.is_exception else (this_rule.test.evidence | default(None)) }}"
+
   - name: MANUAL | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
     when: awscis_write_rule_results
   when:
@@ -256,17 +280,17 @@
     - audit
     - rule_2.1.4
 
-
 - name: AUTOMATED | 2.1.5 | AUDIT | Ensure that S3 Buckets are configured with 'Block public access (bucket settings)'
   block:
   - name: AUTOMATED | 2.1.5 | AUDIT | Set Facts for This Rule
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule:
         id: "2.1.5"
         level: "1"
         title: Ensure that S3 Buckets are configured with 'Block public access (bucket settings)'
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Get Bucket Public Access Block"
-    shell: |
+    ansible.builtin.shell: |
       aws s3api get-public-access-block --bucket {{ item.Name }} |
       { readarray -t ARRAY; if [ -z "$ARRAY" ]; then echo '{"PublicAccessBlockConfiguration" : null}'; else echo "${ARRAY[@]}"; fi; } |
       jq -r '.BucketName="{{ item.Name }}"'
@@ -274,17 +298,21 @@
     register: aws_s3api_get_public_access_block_raw
     changed_when: false
     failed_when: aws_s3api_get_public_access_block_raw.rc == 1
+
   - name: "AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Format Bucket Public Access Block"
-    set_fact:
+    ansible.builtin.set_fact:
       aws_s3api_get_public_access_block: '{{ aws_s3api_get_public_access_block_raw | json_query("results[*].stdout") | map("from_json") | list | default([],true) }}' 
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Evidence Query
-    set_fact:
+    ansible.builtin.set_fact:
       evidence_query: '[?PublicAccessBlockConfiguration == `null` || PublicAccessBlockConfiguration.BlockPublicAcls != `true` || PublicAccessBlockConfiguration.BlockPublicPolicy != `true` || PublicAccessBlockConfiguration.IgnorePublicAcls != `true` || PublicAccessBlockConfiguration.RestrictPublicBuckets != `true`]'
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Source Query
-    set_fact:
+    ansible.builtin.set_fact:
       source_query: "length({{ evidence_query }})"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Set Assessment Parameters
-    set_fact:
+    ansible.builtin.set_fact:
       this_rule: 
         id: "{{ this_rule.id }}"
         level: "{{ this_rule.level }}"
@@ -295,18 +323,21 @@
           target: true
           status: ['pass','fail','unknown']
           evidence: "{{ aws_s3api_get_public_access_block | json_query(evidence_query) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Create Assessment Result
-    set_fact:
+    ansible.builtin.set_fact:
       assessment:
         - rule-id: "xccdf_org.cisecurity.benchmarks_rule_{{ this_rule.id }}_L{{ this_rule.level }}_{{ this_rule.title | replace(\"'\",'') | replace('\"','') | replace(' ','_') }}"
           rule-title: "(L{{ this_rule.level }}) {{ this_rule.title }}"
           result: "{{ 'Exception' if this_rule.is_exception else (( this_rule.test.source == this_rule.test.target ) | ternary( this_rule.test.status[0], this_rule.test.status[1], this_rule.test.status[2] )) }}"
           evidence: "{{ exception_evidence_message if this_rule.is_exception else (this_rule.test.evidence | default(None)) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | AUDIT | L{{ this_rule.level }} | {{ this_rule.title }} | Add to CIS Output
-    set_fact:
+    ansible.builtin.set_fact:
       rule_results: "{{ rule_results | default([]) | union(assessment) }}"
+
   - name: AUTOMATED | {{ this_rule.id }} | PATCH | L{{ this_rule.level }} | {{ this_rule.title }} | Put Bucket Public Access Block
-    shell: aws s3api put-public-access-block --bucket {{ item.BucketName }} --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+    ansible.builtin.shell: aws s3api put-public-access-block --bucket {{ item.BucketName }} --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
     loop: "{{ aws_s3api_get_public_access_block | json_query(evidence_query) }}"
     changed_when: true
     when:
